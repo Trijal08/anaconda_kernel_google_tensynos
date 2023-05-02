@@ -338,7 +338,6 @@
 	/* DHD_LB_STATS - To display the Load Blancing statistics */
 	#define DHD_LB
 	#define DHD_LB_RXP
-	#define DHD_LB_TXP
 	#define DHD_LB_STATS
 	#if IS_ENABLED(CONFIG_ARCH_BRCMSTB)
 		#define DHD_LB_CPU_SET8 0x000
