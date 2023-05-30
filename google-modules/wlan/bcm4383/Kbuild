@@ -63,6 +63,8 @@ DHDCFLAGS += --std=gnu17
 # m: module type driver
 # y: built-in type driver
 ##########################
+DHDCFLAGS += -DBCM_USE_PLATFORM_STRLCPY
+
 DRIVER_TYPE ?= m
 
 # Add chip specific suffix to the output on customer release
