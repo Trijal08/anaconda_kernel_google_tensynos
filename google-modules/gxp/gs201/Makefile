@@ -86,8 +86,6 @@ KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 -include $(ROOT_DIR)/private/google-modules/soc/gs/Makefile.include
 M ?= $(shell pwd)
 
-ccflags-y += -DGIT_REPO_TAG=\"Not\ a\ git\ repository\"
-
 # If building via make directly, specify target platform by adding
 #     "GXP_PLATFORM=<target>"
 # With one of the following values:
