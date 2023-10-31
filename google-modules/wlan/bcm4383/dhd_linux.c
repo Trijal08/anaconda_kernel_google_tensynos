@@ -6943,6 +6943,7 @@ dhd_force_collect_socram_during_wifi_onoff(dhd_pub_t *dhdp)
 #endif /* OEM_ANDROID */
 }
 
+#ifdef SHOW_LOGTRACE
 static void
 dhd_free_event_data_fmts_buf(dhd_info_t *dhd)
 {
@@ -6979,6 +6980,7 @@ dhd_free_event_data_fmts_buf(dhd_info_t *dhd)
 #endif /* COEX_CPU */
 
 }
+#endif /* SHOW_LOGTRACE */
 
 int
 dhd_stop(struct net_device *net)
@@ -7357,6 +7359,7 @@ dhd_force_collect_init_fail_dumps(dhd_pub_t *dhdp)
 #endif /* DEBUG_DNGL_INIT_FAIL */
 #endif /* CUSTOMER_HW4_DEBUG */
 
+#ifdef DHD_FW_COREDUMP
 	/* for android force collect socram for FW init failures
 	 * by putting bus state to LOAD
 	 */
@@ -7366,7 +7369,6 @@ dhd_force_collect_init_fail_dumps(dhd_pub_t *dhdp)
 	if (dhdp->busstate == DHD_BUS_DOWN) {
 		dhdp->busstate = DHD_BUS_LOAD;
 	}
-#ifdef DHD_FW_COREDUMP
 	/* save core dump or write to a file */
 	if (dhdp->memdump_enabled && (dhdp->busstate != DHD_BUS_DOWN)) {
 #ifdef DHD_SDTC_ETB_DUMP
@@ -10489,6 +10491,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 
 	atomic_set(&dhd->pub.edl_attached, 0);
 
+#ifdef DHD_FW_COREDUMP
 	/* alloc memory for socram during init itself, newer chips
 	 * require 4M and this requires vmalloc which will fail
 	 * if called from a non sleepable context
@@ -10497,6 +10500,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 		DHD_ERROR(("%s: Failed to alloc memdump memory !\n", __FUNCTION__));
 		goto fail;
 	}
+#endif
 
 	/* Allocate core dump size after each section len is set up
 	 * coredump consist of hdr, socram, sssr, sdtc and coex
