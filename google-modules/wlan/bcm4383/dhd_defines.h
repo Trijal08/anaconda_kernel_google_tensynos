@@ -82,7 +82,7 @@
 	#define CONFIG_WLAN_REGION_CODE 100
 	#define CONFIG_WLAIBSS 1
 	#define CONFIG_WL_RELMCAST 1
-	#define CONFIG_BCMDHD_PREALLOC_MEMDUMP 1
+	// #define CONFIG_BCMDHD_PREALLOC_MEMDUMP 1
 	#define CONFIG_BCMDHD_OOB_HOST_WAKE 1
 	#define CONFIG_BCMDHD_GET_OOB_STATE 1
 	#if IS_ENABLED(CONFIG_GOOGLE_DAL_CORE)
@@ -110,7 +110,7 @@
 #define BCMFILEIMAGE
 #define DHDTHREAD
 #define DHD_DUMP_FILE_WRITE_FROM_KERNEL
-#define DHD_FW_COREDUMP
+// #define DHD_FW_COREDUMP
 #define DHD_USE_RANDMAC
 #define EMBEDDED_PLATFORM
 #define GET_CUSTOM_MAC_ENABLE
@@ -118,8 +118,8 @@
 #define LINUX
 #define PNO_SUPPORT
 #define SEC_ENHANCEMENT
-#define SHOW_EVENTS
-#define SHOW_LOGTRACE
+// #define SHOW_EVENTS
+// #define SHOW_LOGTRACE
 #define WIFI_ACT_FRAME
 #define WLP2P
 #define WL_BW160MHZ
@@ -132,8 +132,8 @@
 /* ################ */
 #define WL_VIRTUAL_APSTA
 #define DHD_EXPORT_CNTL_FILE
-#define EWP_ECNTRS_LOGGING
-#define EWP_RTT_LOGGING
+// #define EWP_ECNTRS_LOGGING
+// #define EWP_RTT_LOGGING
 #if IS_ENABLED(CONFIG_BCMDHD_PCIE)
 	/* Resume delay WAR not required for P26 platform */
 	#if !(IS_ENABLED(CONFIG_SOC_MBU) && IS_ENABLED(CONFIG_BCM4390))
@@ -143,10 +143,10 @@
 	#define FW_SIGNATURE
 	#define BL_HEAP_START_GAP_SIZE 0x1000
 	#define BL_HEAP_SIZE 0x10000
-	#define EWP_EDL
-	#define EWP_DACS
-	#define EWP_EVENTTS_LOG
-	#define EVENT_LOG_RATE_HC
+	// #define EWP_EDL
+	// #define EWP_DACS
+	// #define EWP_EVENTTS_LOG
+	// #define EVENT_LOG_RATE_HC
 #endif
 #if IS_ENABLED(CONFIG_ARCH_MESON)
         #undef DHD_LINUX_STD_FW_API
@@ -174,10 +174,10 @@
 #endif
 /* Enable wakelock for legacy scan */
 #define DHD_USE_SCAN_WAKELOCK
-/* Enable wakelock debug function */
-#define DHD_TRACE_WAKE_LOCK
-/* Support of power stats in sysfs */
-#define PWRSTATS_SYSFS
+// /* Enable wakelock debug function */
+// #define DHD_TRACE_WAKE_LOCK
+// /* Support of power stats in sysfs */
+// #define PWRSTATS_SYSFS
 /* Enable SBN feature */
 #define DHD_SBN
 /* Enable inband device wake feature */
@@ -212,32 +212,32 @@
 #define RTT_GEOFENCE_INTERVAL
 /* Debug flag */
 #define RTT_GEOFENCE_CONT
-/* Debug flag */
-#if IS_ENABLED(CONFIG_FIB_RULES)
-#define HAL_DEBUGABILITY
-	#if IS_ENABLED(CONFIG_SOC_GOOGLE)
-		#define DEBUGABILITY
-		#define DEBUGABILITY_DISABLE_MEMDUMP
-		#define DHD_DEBUGABILITY_LOG_DUMP_RING
-		#define DHD_PKT_LOGGING_DBGRING
-		#define DHD_ECNTRS_EXPOSED_DBGRING
-	#endif
-#else
-	#define DHD_FW_COREDUMP
-#endif
+// /* Debug flag */
+// #if IS_ENABLED(CONFIG_FIB_RULES)
+// #define HAL_DEBUGABILITY
+// 	#if IS_ENABLED(CONFIG_SOC_GOOGLE)
+// 		#define DEBUGABILITY
+// 		#define DEBUGABILITY_DISABLE_MEMDUMP
+// 		#define DHD_DEBUGABILITY_LOG_DUMP_RING
+// 		#define DHD_PKT_LOGGING_DBGRING
+// 		#define DHD_ECNTRS_EXPOSED_DBGRING
+// 	#endif
+// #else
+// 	#define DHD_FW_COREDUMP
+// #endif
 #define DHD_DUMP_BUF_KVMALLOC
-#define CUSTOMER_DBG_SYSTEM_TIME
-#define CUSTOMER_DBG_PREFIX_ENABLE
-#define LOG_CUSTOM_PREFIX_AND_RTC "[dhd][wlan]"
-#define DHD_LOGLEVEL
+// #define CUSTOMER_DBG_SYSTEM_TIME
+// #define CUSTOMER_DBG_PREFIX_ENABLE
+// #define LOG_CUSTOM_PREFIX_AND_RTC "[dhd][wlan]"
+// #define DHD_LOGLEVEL
 /* SCAN TYPES, if kernel < 4.17 ..back port support required */
 #if IS_ENABLED(CONFIG_CFG80211_SCANTYPE_BKPORT)
 	#define WL_SCAN_TYPE
 #endif
-/* Print out kernel panic point of file and line info when assertion happened */
-#define BCMASSERT_LOG
-/* Enable Log Dump */
-#define DHD_LOG_DUMP
+// /* Print out kernel panic point of file and line info when assertion happened */
+// #define BCMASSERT_LOG
+// /* Enable Log Dump */
+// #define DHD_LOG_DUMP
 /* Enable log print rate limit */
 #define DHD_LOG_PRINT_RATE_LIMIT
 /* Block ARP during DHCP on STA/SoftAP concurrent mode */
@@ -271,14 +271,14 @@
 	#define AGG_H2D_DB
 	/* Use spin_lock_bh locks */
 	#define DHD_USE_SPIN_LOCK_BH
-	/* Enable SSSR Dump */
-	#define DHD_SSSR_DUMP
-	/* Enable System Debug Trace Controller, Embedded Trace Buffer */
-	#define DHD_SDTC_ETB_DUMP
-	/* Enable SMD/Minidump collection */
-	#define D2H_MINIDUMP
-	/* ROT and Scan timeout debugging due to Kernel scheduling problem */
-	#define DHD_KERNEL_SCHED_DEBUG
+	// /* Enable SSSR Dump */
+	// #define DHD_SSSR_DUMP
+	// /* Enable System Debug Trace Controller, Embedded Trace Buffer */
+	// #define DHD_SDTC_ETB_DUMP
+	// /* Enable SMD/Minidump collection */
+	// #define D2H_MINIDUMP
+	// /* ROT and Scan timeout debugging due to Kernel scheduling problem */
+	// #define DHD_KERNEL_SCHED_DEBUG
 	/* Enable CTO Recovery */
 	#define BCMPCIE_CTO_PREVENTION
 	/* no reset during dhd attach */
@@ -292,8 +292,8 @@
 	/* Perform Backplane Reset else FLR will happen */
 	/* #define DHD_USE_BP_RESET_SS_CTRL */
 	#define DBG_PRINT_AMNI
-	/* Memory consumed by DHD */
-	#define DHD_MEM_STATS
+	// /* Memory consumed by DHD */
+	// #define DHD_MEM_STATS
 	/* Check trap in the case of ROT */
 	#define CHECK_TRAP_ROT
 	/* Enable Host SFH LLC insertion in Tx pkts */
@@ -321,14 +321,14 @@
 		/* Active Radio tap */
 		#define DHD_ART
 	#endif
-	/* Not enabled for the platform due to overhead */
-	#if !(IS_ENABLED(CONFIG_ARCH_BRCMSTB) || IS_ENABLED(CONFIG_SYNAPTICS_SOC))
-		/* Enable pktid logging */
-		#define DHD_MAP_PKTID_LOGGING
-		/* Flow ring status trace in ISR and DPC */
-		#define DHD_FLOW_RING_STATUS_TRACE
-		#define DHD_MMIO_TRACE
-	#endif
+	// /* Not enabled for the platform due to overhead */
+	// #if !(IS_ENABLED(CONFIG_ARCH_BRCMSTB) || IS_ENABLED(CONFIG_SYNAPTICS_SOC))
+	// 	/* Enable pktid logging */
+	// 	#define DHD_MAP_PKTID_LOGGING
+	// 	/* Flow ring status trace in ISR and DPC */
+	// 	#define DHD_FLOW_RING_STATUS_TRACE
+	// 	#define DHD_MMIO_TRACE
+	// #endif
 	/* Enable internal Rx packet pool */
 	#define RX_PKT_POOL
 	/* Enable Load Balancing support by default. */
@@ -338,7 +338,7 @@
 	/* DHD_LB_STATS - To display the Load Blancing statistics */
 	#define DHD_LB
 	#define DHD_LB_RXP
-	#define DHD_LB_STATS
+	// #define DHD_LB_STATS
 	#if IS_ENABLED(CONFIG_ARCH_BRCMSTB)
 		#define DHD_LB_CPU_SET8 0x000
 		#define DHD_LB_CPU_SET4 0x000
@@ -511,10 +511,10 @@
 		#define DHD_RX_CPL_POST_BOUND 96
 		#define DHD_CTRL_CPL_POST_BOUND 16
 		#define DHD_LB_TXBOUND 32
-		/* Detect NON DMA M2M corruption (MFG only) */
-		#define DHD_NON_DMA_M2M_CORRUPTION
-		/* Detect FW Memory Corruption (MFG only) */
-		#define DHD_FW_MEM_CORRUPTION
+		// /* Detect NON DMA M2M corruption (MFG only) */
+		// #define DHD_NON_DMA_M2M_CORRUPTION
+		// /* Detect FW Memory Corruption (MFG only) */
+		// #define DHD_FW_MEM_CORRUPTION
 		/* Recover timeouts */
 		#define DHD_RECOVER_TIMEOUT
 		#if defined(BCMDHD) && (BCMDHD == 4398)
@@ -558,8 +558,8 @@
 	#endif
 #endif /* # CONFIG_BCMDHD_PCIE */
 #if IS_ENABLED(CONFIG_SOC_GOOGLE)
-	#define DHD_FILE_DUMP_EVENT
-	#define DHD_HAL_RING_DUMP
+	// #define DHD_FILE_DUMP_EVENT
+	// #define DHD_HAL_RING_DUMP
 	/* Pixel platform only, to support ring data flushing properly */
 	#define DHD_DUMP_START_COMMAND
 	/* MLO related back port changes */
@@ -639,9 +639,9 @@
 #define WL_SOFTAP_ACS
 /* Wake */
 #define CONFIG_HAS_WAKELOCK
-#define DHD_WAKE_EVENT_STATUS
-#define DHD_WAKE_RX_STATUS
-#define CUSTOM_WAKE_REASON_STATS
+// #define DHD_WAKE_EVENT_STATUS
+// #define DHD_WAKE_RX_STATUS
+// #define CUSTOM_WAKE_REASON_STATS
 #define DHD_WAKEPKT_SET_MARK
 /* Android Q */
 #define WL_USE_RANDOMIZED_SCAN
@@ -654,32 +654,32 @@
 #define WL_P2P_RAND
 /* Custom Mapping of DSCP to User Priority */
 #define WL_CUSTOM_MAPPING_OF_DSCP
-#if IS_ENABLED(CONFIG_BCMDHD_PCIE)
-	#define DHD_WAKE_STATUS
-#endif
+// #if IS_ENABLED(CONFIG_BCMDHD_PCIE)
+// 	#define DHD_WAKE_STATUS
+// #endif
 #define ENABLE_BCN_LI_BCN_WAKEUP
 /* Hang */
-#define DHD_HANG_SEND_UP_TEST
+// #define DHD_HANG_SEND_UP_TEST
 #define DHD_USE_EXTENDED_HANG_REASON
 #define PREVENT_REOPEN_DURING_HANG
 #define SUPPORT_LINKDOWN_RECOVERY
 #define SUPPORT_TRIGGER_HANG_EVENT
 /* Logging */
-#define BCMASSERT_LOG
-#define DHD_8021X_DUMP
-#define DHD_DHCP_DUMP
-#define DHD_ICMP_DUMP
-#define DHD_ARP_DUMP
-#define DHD_DNS_DUMP
-#define DHD_PKT_LOGGING
-#define DHD_PKTDUMP_ROAM
+// #define BCMASSERT_LOG
+// #define DHD_8021X_DUMP
+// #define DHD_DHCP_DUMP
+// #define DHD_ICMP_DUMP
+// #define DHD_ARP_DUMP
+// #define DHD_DNS_DUMP
+// #define DHD_PKT_LOGGING
+// #define DHD_PKTDUMP_ROAM
 #define DHD_RANDMAC_LOGGING
-#define DHD_STATUS_LOGGING
-#define DHD_WAKEPKT_DUMP
+// #define DHD_STATUS_LOGGING
+// #define DHD_WAKEPKT_DUMP
 #define RSSI_MONITOR_SUPPORT
 #define SET_SSID_FAIL_CUSTOM_RC 100
-#define DHD_EVENT_LOG_FILTER
-#define WL_CFGVENDOR_SEND_HANG_EVENT
+// #define DHD_EVENT_LOG_FILTER
+// #define WL_CFGVENDOR_SEND_HANG_EVENT
 /* Packet */
 #define BLOCK_IPV6_PACKET
 /* #define DHD_DONOT_FORWARD_BCMEVENT_AS_NETWORK_PKT # NAN test failure */
@@ -742,7 +742,7 @@
 #define DHD_RESET_FEM_5G_RFFE_VI0
 /* Custom tuning value */
 #define CUSTOM_ROAM_TIME_THRESH_IN_SUSPEND 6000
-#define CUSTOM_EVENT_PM_WAKE 30
+// #define CUSTOM_EVENT_PM_WAKE 30
 #define CUSTOM_EVENT_PM_PERCENT 70
 #define CUSTOM_KEEP_ALIVE_SETTING 30000
 #define CUSTOM_PNO_EVENT_LOCK_xTIME 10
@@ -796,8 +796,8 @@
 	/* Runtime PM feature */
 	#define DHD_PCIE_RUNTIMEPM
 	#define MAX_IDLE_COUNT 5
-	/* AXI error logging */
-	#define DNGL_AXI_ERROR_LOGGING
+	// /* AXI error logging */
+	// #define DNGL_AXI_ERROR_LOGGING
 	/* #define DHD_USE_WQ_FOR_DNGL_AXI_ERROR */
 	/* 4way handshake disconnection feature */
 	#define DHD_4WAYM4_FAIL_DISCONNECT
@@ -842,7 +842,7 @@
 #define RSSI_MONITOR_SUPPORT
 /* RTT */
 #define RTT_SUPPORT
-#define RTT_DEBUG
+// #define RTT_DEBUG
 /* NDOffload */
 #define NDO_CONFIG_SUPPORT
 #define IPV6_NDO_SUPPORT
@@ -850,7 +850,7 @@
 #define DBG_PKT_MON
 #define DBG_PKT_MON_INIT_DEFAULT
 #define DHD_PKT_MON_DUAL_STA
-#define DNGL_EVENT_SUPPORT
+// #define DNGL_EVENT_SUPPORT
 #define PARSE_DONGLE_HOST_EVENT
 #define WL_CFGVENDOR_SEND_ALERT_EVENT
 /* Early suspend */
@@ -1023,13 +1023,13 @@
 	/* New Features */
 	#define WL11U
 	#define MFP
-	#if IS_ENABLED(CONFIG_BCMDHD_PCIE)
-		/* debug info */
-		#define DHD_WAKE_STATUS
-		#define DHD_WAKE_RX_STATUS
-		#define DHD_WAKE_EVENT_STATUS
-		#define DHD_WAKE_STATUS_PRINT
-	#endif
+	// #if IS_ENABLED(CONFIG_BCMDHD_PCIE)
+	// 	/* debug info */
+	// 	#define DHD_WAKE_STATUS
+	// 	#define DHD_WAKE_RX_STATUS
+	// 	#define DHD_WAKE_EVENT_STATUS
+	// 	#define DHD_WAKE_STATUS_PRINT
+	// #endif
 	#if IS_ENABLED(CONFIG_BCMDHD_SDIO)
 		#define BDC
 		#define DHD_BCMEVENTS
@@ -1086,14 +1086,14 @@
 			#define DHD_USE_STATIC_IOCTLBUF
 		#endif
 		/* Enable health check event handling */
-		#define DNGL_EVENT_SUPPORT
-		#define HCHK_COMMON_SW_EVENT
+		// #define DNGL_EVENT_SUPPORT
+		// #define HCHK_COMMON_SW_EVENT
 	#endif
 	#if IS_ENABLED(CONFIG_DHD_OF_SUPPORT)
 		#define DHD_OF_SUPPORT
 	#endif
-	/* Print 802.1X packets */
-	#define DHD_8021X_DUMP
+	// /* Print 802.1X packets */
+	// #define DHD_8021X_DUMP
 	/* prioritize 802.1x packet */
 	#define EAPOL_PKT_PRIO
 	/* Update Tx/Rx rate info */
@@ -1111,7 +1111,7 @@
 #endif
 
 /* Collect dumps upon init time failures */
-#define DEBUG_DNGL_INIT_FAIL
+// #define DEBUG_DNGL_INIT_FAIL
 #define DHD_CAP_CUSTOMER "hw2 "
 #if IS_ENABLED(CONFIG_SOC_GOOGLE)
 	/* The flag will be enabled only on customer platform */
@@ -1130,7 +1130,7 @@
 	#define SUPPORT_MULTIPLE_NVRAM
 	#define SUPPORT_MULTIPLE_CLMBLOB
 	#define DHD_LB_TXP_DEFAULT_ENAB
-	#define DHD_SSSR_COREDUMP
+	// #define DHD_SSSR_COREDUMP
 	#define DHD_REDUCE_PM_LOG
 	/* LB RXP Flow control to avoid OOM */
 	#define LB_RXP_STOP_THR 500
@@ -1279,7 +1279,7 @@
 	#define DHD_MSI_SUPPORT
 #endif /* CONFIG_SOC_GOOGLE */
 
-#define DHD_DEBUG
+// #define DHD_DEBUG
 
 #if IS_ENABLED(CONFIG_ARCH_HISI) || IS_ENABLED(CONFIG_ARCH_BRCMSTB) || IS_ENABLED(CONFIG_SYNAPTICS_SOC)
 #include "dhd_defines_internal.h"
