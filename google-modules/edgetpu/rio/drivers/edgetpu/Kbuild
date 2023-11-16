@@ -12,8 +12,6 @@ ccflags-y	+= $(EXTRA_CFLAGS) -DCONFIG_GCIP=1 \
 # Flags needed for external modules.
 ccflags-y	+= -DCONFIG_GOOGLE_BCL
 
-ccflags-y	+= -DGIT_REPO_TAG=\"Not\ a\ git\ repository\"
-
 obj-$(CONFIG_RIO)	+= rio.o
 
 GCIP_DIR=gcip-kernel-driver/drivers/gcip
