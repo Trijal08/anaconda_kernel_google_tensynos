@@ -538,12 +538,12 @@
 		#define DHD_SKIP_COREDUMP_OLDER_CHIPS
 		/* Skip coredump for continousy pkt drop health check */
 		#define SKIP_COREDUMP_PKTDROP_RXHC
-		#if IS_ENABLED(CONFIG_PCI_EXYNOS_GS) || IS_ENABLED(CONFIG_SOC_LGA)
-			/* Boost host cpufreq to max for peak tput. default is false */
-			#define DHD_HOST_CPUFREQ_BOOST
-			/* Boost host cpufreq to max for peak tput. default is true */
-			#define DHD_HOST_CPUFREQ_BOOST_DEFAULT_ENAB
-		#endif
+		// #if IS_ENABLED(CONFIG_PCI_EXYNOS_GS) || IS_ENABLED(CONFIG_SOC_LGA)
+		// 	/* Boost host cpufreq to max for peak tput. default is false */
+		// 	#define DHD_HOST_CPUFREQ_BOOST
+		// 	/* Boost host cpufreq to max for peak tput. default is true */
+		// 	#define DHD_HOST_CPUFREQ_BOOST_DEFAULT_ENAB
+		// #endif
 		/* Force all CPUs to run at MAX frequencies */
 		/* #define DHD_FORCE_MAX_CPU_FREQ */
 					/* Support L1SS */
