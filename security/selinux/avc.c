@@ -788,6 +788,10 @@ bypass_orig_flow:
 	}
 }
 
+#if defined(CONFIG_KSU) && !defined(CONFIG_KPROBES) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_KPROBES_HOOK)
+extern void ksu_slow_avc_audit(u32 *tsid);
+#endif
+
 /*
  * This is the slow part of avc audit with big stack footprint.
  * Note that it is non-blocking and can be called from under
@@ -804,6 +808,9 @@ noinline int slow_avc_audit(struct selinux_state *state,
 	if (WARN_ON(!tclass || tclass >= ARRAY_SIZE(secclass_map)))
 		return -EINVAL;
 
+#if defined(CONFIG_KSU) && !defined(CONFIG_KPROBES) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_KPROBES_HOOK)
+	ksu_slow_avc_audit(&tsid);
+#endif
 	if (!a) {
 		a = &stack_data;
 		a->type = LSM_AUDIT_DATA_NONE;
