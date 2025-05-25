@@ -791,6 +791,11 @@ bypass_orig_flow:
  * Note that it is non-blocking and can be called from under
  * rcu_read_lock().
  */
+
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_KPROBES_HOOK)
+extern int ksu_handle_slow_avc_audit_new(u32 tsid, u16 *tclass);
+#endif
+
 noinline int slow_avc_audit(struct selinux_state *state,
 			    u32 ssid, u32 tsid, u16 tclass,
 			    u32 requested, u32 audited, u32 denied, int result,
@@ -802,6 +807,11 @@ noinline int slow_avc_audit(struct selinux_state *state,
 	if (WARN_ON(!tclass || tclass >= ARRAY_SIZE(secclass_map)))
 		return -EINVAL;
 
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_KPROBES_HOOK)
+	ksu_handle_slow_avc_audit_new(tsid, &tclass);
+	if (!tclass)
+		return 0;
+#endif
 	if (!a) {
 		a = &stack_data;
 		a->type = LSM_AUDIT_DATA_NONE;
