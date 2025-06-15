@@ -52,7 +52,6 @@ endif
 DHDCFLAGS += \
   -Wall \
   -Werror \
-  -Wno-parentheses-equality \
   -Wno-macro-redefined \
   -Wstrict-prototypes
 
