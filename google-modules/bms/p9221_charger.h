@@ -1203,10 +1203,6 @@ enum p9xxx_renego_state {
 
 #define UEVENT_ENVP_LEN 20
 
-static char *uevent_source_str[] = {
-	"WLC", "FAN", "RTX"
-};
-
 enum uevent_source {
 	UEVENT_WLC = 0,
 	UEVENT_FAN,
