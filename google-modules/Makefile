@@ -42,12 +42,15 @@ endif
 ifdef CONFIG_SOC_ZUMAPRO
 # zumapro
 obj-y += display/panels/caimito/
+obj-y += display/panels/tegu/
 obj-y += fingerprint/fpc/
 obj-y += fingerprint/qcom/qfs4008/
 obj-y += radio/samsung/s5400/
+obj-y += radio/samsung/s5300/
 obj-y += sensors/hall_sensor/
 obj-y += touch/synaptics/syna_gtd/
 obj-y += wlan/bcm4390/
+obj-y += wlan/bcm4383/
 else
 # gs201 and zuma
 obj-y += fingerprint/goodix/fps_touch_handler/
