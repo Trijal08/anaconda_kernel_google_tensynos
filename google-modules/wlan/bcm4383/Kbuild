@@ -49,7 +49,11 @@ DHDCFLAGS += \
   -Wall \
   -Werror \
   -Wno-macro-redefined \
-  -Wstrict-prototypes
+  -Wstrict-prototypes \
+  -Wno-unused-variable \
+  -Wno-unused-function \
+  -Wno-address \
+  -Wno-int-in-bool-context \
 
 DHDCFLAGS += --std=gnu17
 
