@@ -54,6 +54,7 @@ DHDCFLAGS += \
   -Wno-unused-function \
   -Wno-address \
   -Wno-int-in-bool-context \
+  -Wno-parentheses-equality
 
 DHDCFLAGS += --std=gnu17
 
