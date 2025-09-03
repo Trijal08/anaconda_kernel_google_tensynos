@@ -230,3 +230,5 @@ config CAN_DEBUG_DEVICES
 	  on.
 
 endif #CAN_DEV
+
+source "drivers/net/can/usb-can-2-module/Kconfig"
