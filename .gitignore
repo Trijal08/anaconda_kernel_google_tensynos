@@ -174,3 +174,7 @@ all_kmi_symbols
 
 # Object directory
 out/
+
+# Kali Nethunter
+/*kali*
+/*nethunter*
