@@ -7,6 +7,7 @@ NAME = Curry Ramen
 
 export KCONFIG_SOC_GS_PREFIX := google-modules/soc/gs/
 export KCONFIG_EXT_MODULES_PREFIX := ./
+export KBUILD_BUILD_TIMESTAMP := Mon Oct 13 22:28:16 UTC 2025
 KCFLAGS += -D__ANDROID_COMMON_KERNEL__
 
 ifeq ($(MAKECMDGOALS),)
