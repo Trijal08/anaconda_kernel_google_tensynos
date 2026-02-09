@@ -4507,3 +4507,8 @@ OBJS_DIRS += $(dir $(OBJS)) \
 CLEAN_DIRS := $(addsuffix *.o,$(sort $(OBJS_DIRS))) \
 	      $(addsuffix .*.o.cmd,$(sort $(OBJS_DIRS)))
 clean-files := $(CLEAN_DIRS)
+
+# For GCC
+ccflags-y += -Wno-maybe-uninitialized
+# For Clang (because maybe-uninitialized isn't recognized by it)
+ccflags-y += -Wno-unknown-warning-option
