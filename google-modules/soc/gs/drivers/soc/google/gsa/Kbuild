@@ -2,6 +2,8 @@
 
 ccflags-y += -I$(ROOT_DIR)/private/google-modules/trusty/include
 
+ccflags-y += -Wno-nonnull
+
 obj-$(CONFIG_GSA) += gsa.o
 gsa-objs := gsa_core.o gsa_log.o gsa_mbox.o gsa_tz.o
 
