@@ -34,16 +34,21 @@ static int ea_set_matrix(struct drm_crtc *crtc, unsigned int bl_lvl)
 	struct exynos_matrix matrix;
 	struct drm_property *prop_linear_matrix_override;
 	struct drm_property_blob *pblob = NULL;
-	struct exynos_drm_crtc_state fake_crtc_state;
+	struct exynos_drm_crtc_state *fake_crtc_state = NULL;
 	uint32_t blob_id;
 	__u16 ofs, coef;
-	int rc;
+	int rc = 0;
 
 	if (crtc == NULL) {
 		pr_err("crtc has not been initialized\n");
 		rc = -EIO;
 		goto exit;
 	}
+
+	// Allocate the large state on the heap
+	fake_crtc_state = kzalloc(sizeof(*fake_crtc_state), GFP_KERNEL);
+	if (!fake_crtc_state)
+		return -ENOMEM;
 
 	prop_linear_matrix_override = exynos_crtc->props.linear_matrix_override;
 	if (prop_linear_matrix_override == NULL) {
@@ -109,20 +114,21 @@ setup:
 	 * upon receiving the atomic_set_property call. We need to free the
 	 * resources related to the state ourselves.
 	 */
-	memset(&fake_crtc_state, 0, sizeof(fake_crtc_state));
-	fake_crtc_state.base.crtc = crtc;
+	fake_crtc_state->base.crtc = crtc;
 
 	if (bl_lvl == 0)
 		blob_id = 0; // erase matrix
 	else
 		blob_id = pblob->base.id;
 
-	crtc->funcs->atomic_set_property(crtc, &fake_crtc_state.base,
+	crtc->funcs->atomic_set_property(crtc, &fake_crtc_state->base,
 					 prop_linear_matrix_override, blob_id);
 
-	drm_property_blob_put(pblob);
+	if (pblob)
+		drm_property_blob_put(pblob);
 
 exit:
+	kfree(fake_crtc_state);
 	return rc;
 }
 
