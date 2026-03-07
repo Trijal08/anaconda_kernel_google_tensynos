@@ -56,6 +56,9 @@ DHDCFLAGS += \
   -Wno-int-in-bool-context \
   -Wno-parentheses-equality
 
+# Fix Clang build errors
+DHDCFLAGS += -Wno-unused-but-set-variable -Wno-unused-const-variable -Wno-parentheses-equality
+
 DHDCFLAGS += --std=gnu17
 
 ##########################
