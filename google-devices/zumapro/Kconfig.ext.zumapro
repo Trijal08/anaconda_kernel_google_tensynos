@@ -82,7 +82,13 @@ source "$(KCONFIG_EXT_MODULES_PREFIX)private/google-modules/power/mitigation/Kco
 
 source "$(KCONFIG_EXT_MODULES_PREFIX)private/google-modules/power/reset/Kconfig"
 
+if ZUMAPRO_CAIMITO
+source "$(KCONFIG_EXT_MODULES_PREFIX)private/google-modules/radio/samsung/s5400/Kconfig"
+endif
+
+if ZUMAPRO_TEGU
 source "$(KCONFIG_EXT_MODULES_PREFIX)private/google-modules/radio/samsung/s5300/Kconfig"
+endif
 
 source "$(KCONFIG_EXT_MODULES_PREFIX)private/google-modules/touch/common/Kconfig"
 
