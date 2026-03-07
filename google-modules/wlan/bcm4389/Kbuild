@@ -112,6 +112,9 @@ DHDCFLAGS += -Wall -Wstrict-prototypes -Dlinux -DLINUX -DBCMDRIVER \
 	-DDHD_USE_RANDMAC \
 	-DWL_P2P_USE_RANDMAC
 
+# Fix Clang build errors
+DHDCFLAGS += -Wno-unused-but-set-variable -Wno-unused-const-variable -Wno-parentheses-equality
+
 DHDCFLAGS += -DOEM_ANDROID
 
 #################
