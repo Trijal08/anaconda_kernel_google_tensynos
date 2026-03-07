@@ -49,6 +49,19 @@ config KCONFIG_EXT_ZUMAPRO
 
 endchoice
 
+choice
+	prompt "Tensor G4 (zumapro) target devices"
+	depends on KCONFIG_EXT_ZUMAPRO
+	default ZUMAPRO_CAIMITO
+
+config ZUMAPRO_CAIMITO
+	bool "Google Pixel 9/9 Pro/9 Pro XL/9 Pro Fold"
+
+config ZUMAPRO_TEGU
+	bool "Google Pixel 9a"
+
+endchoice
+
 if KCONFIG_EXT_GS201
 source "google-devices/gs201/Kconfig.ext.gs201"
 endif
