@@ -126,6 +126,9 @@ DHDCFLAGS += -Wall -Werror -Wstrict-prototypes -Wno-unused-variable -Wno-unused-
 	-DDHD_USE_RANDMAC -DWL_BW320MHZ -DWL_BW160MHZ \
 	-DWL_P2P_USE_RANDMAC
 
+# Fix Clang build errors
+DHDCFLAGS += -Wno-unused-but-set-variable -Wno-unused-const-variable -Wno-parentheses-equality
+
 # Allow Zero-length and one-element arrays instead of forcing C99 FAM
 ifneq ($(CONFIG_SOC_GOOGLE),)
 	DHDCFLAGS += -fstrict-flex-arrays=0
