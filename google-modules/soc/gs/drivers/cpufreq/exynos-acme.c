@@ -33,9 +33,9 @@
 #include <trace/events/power.h>
 
 #include "exynos-acme.h"
-#if IS_ENABLED(CONFIG_SOC_ZUMA)
+// #if IS_ENABLED(CONFIG_SOC_ZUMA)
 #include <soc/google/gs_tmu_v3.h>
-#endif
+// #endif
 /*
  * list head of cpufreq domain
  */
@@ -256,7 +256,7 @@ static void apply_thermal_pressure(struct exynos_cpufreq_domain *domain,
 				     raw_smp_processor_id());
 }
 
-#if IS_ENABLED(CONFIG_EXYNOS_CPU_THERMAL) && IS_ENABLED(CONFIG_SOC_ZUMA)
+#if IS_ENABLED(CONFIG_EXYNOS_CPU_THERMAL) // && IS_ENABLED(CONFIG_SOC_ZUMA)
 /*
  * ECT table is in ascending order of frequencies
  * domain->freq_table is in descending order of frequencies
@@ -452,7 +452,7 @@ static int __exynos_cpufreq_target(struct cpufreq_policy *policy,
 		goto out;
 	}
 
-#if IS_ENABLED(CONFIG_EXYNOS_CPU_THERMAL) && IS_ENABLED(CONFIG_SOC_ZUMA)
+#if IS_ENABLED(CONFIG_EXYNOS_CPU_THERMAL) // && IS_ENABLED(CONFIG_SOC_ZUMA)
 	if (!cpumask_subset(&domain->cpus, &tmu_enabled_mask)) {
 		ret = -EINVAL;
 		goto out;
@@ -1530,7 +1530,7 @@ static int exynos_cpufreq_probe(struct platform_device *pdev)
 		print_domain_info(domain);
 	}
 
-#if IS_ENABLED(CONFIG_EXYNOS_CPU_THERMAL) && IS_ENABLED(CONFIG_SOC_ZUMA)
+#if IS_ENABLED(CONFIG_EXYNOS_CPU_THERMAL) // && IS_ENABLED(CONFIG_SOC_ZUMA)
 	register_get_cpu_power_table_ect_offset(exynos_cpufreq_get_power_table_ect_offset);
 #endif
 
@@ -1627,7 +1627,7 @@ static int exynos_cpufreq_probe(struct platform_device *pdev)
 	}
 
 	register_pm_notifier(&exynos_cpufreq_pm);
-#if IS_ENABLED(CONFIG_EXYNOS_CPU_THERMAL) && IS_ENABLED(CONFIG_SOC_ZUMA)
+#if IS_ENABLED(CONFIG_EXYNOS_CPU_THERMAL) // && IS_ENABLED(CONFIG_SOC_ZUMA)
 	register_thermal_pressure_cb(exynos_cpufreq_set_tj_pressure_cb);
 #endif
 
