@@ -164,8 +164,9 @@ static int kbase_dump_cpu_gpu_time(struct kbase_jd_atom *katom)
 	 * delay suspend until we process the atom (which may be at the end of a
 	 * long chain of dependencies
 	 */
-	if (kbase_has_arbiter(kctx->kbdev))
-		atomic_inc(&kctx->kbdev->pm.gpu_users_waiting);
+#ifdef CONFIG_MALI_ARBITER_SUPPORT
+	atomic_inc(&kctx->kbdev->pm.gpu_users_waiting);
+#endif /* CONFIG_MALI_ARBITER_SUPPORT */
 	pm_active_err = kbase_pm_context_active_handle_suspend(
 		kctx->kbdev, KBASE_PM_SUSPEND_HANDLER_DONT_REACTIVATE);
 	if (pm_active_err) {
@@ -183,8 +184,11 @@ static int kbase_dump_cpu_gpu_time(struct kbase_jd_atom *katom)
 		kbasep_add_waiting_soft_job(katom);
 
 		return pm_active_err;
-	} else if (kbase_has_arbiter(kctx->kbdev))
+	}
+#ifdef CONFIG_MALI_ARBITER_SUPPORT
+	else
 		atomic_dec(&kctx->kbdev->pm.gpu_users_waiting);
+#endif /* CONFIG_MALI_ARBITER_SUPPORT */
 
 	kbase_backend_get_gpu_time(kctx->kbdev, &cycle_counter, &system_time, &ts);
 
@@ -1719,8 +1723,9 @@ void kbase_resume_suspended_soft_jobs(struct kbase_device *kbdev)
 		if (kbase_process_soft_job(katom_iter) == 0) {
 			kbase_finish_soft_job(katom_iter);
 			resched |= kbase_jd_done_nolock(katom_iter, true);
-			if (kbase_has_arbiter(kctx->kbdev))
-				atomic_dec(&kbdev->pm.gpu_users_waiting);
+#ifdef CONFIG_MALI_ARBITER_SUPPORT
+			atomic_dec(&kbdev->pm.gpu_users_waiting);
+#endif /* CONFIG_MALI_ARBITER_SUPPORT */
 		}
 		rt_mutex_unlock(&kctx->jctx.lock);
 	}

@@ -387,17 +387,13 @@ void kbase_pm_set_policy(struct kbase_device *kbdev, const struct kbase_pm_polic
 		reset_gpu = policy_change_wait_for_L2_off(kbdev);
 #endif
 
-	kbase_pm_lock(kbdev);
-
 	/* During a policy change we pretend the GPU is active */
 	/* A suspend won't happen here, because we're in a syscall from a
 	 * userspace thread
 	 */
-	if (kbase_pm_context_active_handle_suspend_locked(kbdev,
-							  KBASE_PM_SUSPEND_HANDLER_NOT_POSSIBLE))
-		dev_warn_once(
-			kbdev->dev,
-			"Error shouldn't be returned with SUSPEND_HANDLER_NOT_POSSIBLE flag.");
+	kbase_pm_context_active(kbdev);
+
+	kbase_pm_lock(kbdev);
 
 	/* Remove the policy to prevent IRQ handlers from working on it */
 	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
@@ -439,11 +435,12 @@ void kbase_pm_set_policy(struct kbase_device *kbdev, const struct kbase_pm_polic
 	kbase_pm_update_active(kbdev);
 	kbase_pm_update_cores_state(kbdev);
 
+	kbase_pm_unlock(kbdev);
+
 	/* Now the policy change is finished, we release our fake context active
 	 * reference
 	 */
-	kbase_pm_context_idle_locked(kbdev);
-	kbase_pm_unlock(kbdev);
+	kbase_pm_context_idle(kbdev);
 
 #if MALI_USE_CSF
 	/* Reverse the suspension done */

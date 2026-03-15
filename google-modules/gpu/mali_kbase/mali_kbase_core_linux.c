@@ -571,9 +571,19 @@ static int get_irq_irqaw(struct kbase_device *kbdev, struct platform_device *pde
 	int irq;
 	struct irq_data *irqdata;
 
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+	irq = platform_get_irq_byname_optional(pdev, "IRQAW");
+#else
 	irq = platform_get_irq_byname(pdev, "IRQAW");
-	if (irq < 0)
+#endif
+
+	if (irq < 0) {
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+		irq = platform_get_irq_byname_optional(pdev, "irqaw");
+#else
 		irq = platform_get_irq_byname(pdev, "irqaw");
+#endif
+	}
 
 	if (irq < 0)
 		return irq;
@@ -596,23 +606,25 @@ int kbase_get_irqs(struct kbase_device *kbdev)
 	struct platform_device *pdev = to_platform_device(kbdev->dev);
 
 	kbdev->nr_irqs = 0;
+
+	/* First, check for IRQAW as an 'optional' IRQ (avoid kernel warnings
+	 * if it doesn't exist)
+	 */
+	result = get_irq_irqaw(kbdev, pdev);
+	if (!result)
+		goto done;
+
+	/* If IRQAW wasn't found, we must find GPU, JOB and MMU IRQ lines. */
 	result = get_irqs(kbdev, pdev);
 	if (!result)
-		return result;
+		goto done;
 
-	/* return error if any one of the GPU, JOB, MMU
-	 * interrupts missing. Don't lookup for IRQAW.
-	 */
-	if (result && kbdev->nr_irqs) {
-		dev_err(kbdev->dev, "Invalid number of interrupt resources");
-		return result;
-	}
-
-	result = get_irq_irqaw(kbdev, pdev);
-	if (result)
-		dev_err(kbdev->dev, "Invalid or No interrupt resources");
-
+	/* We didn't find GPU, JOB and IRQ lines either, so this is an error. */
+	dev_err(kbdev->dev, "Failed to find interrupt resources");
 	return result;
+done:
+	dev_dbg(kbdev->dev, "Successfully found %d interrupt resources\n", kbdev->nr_irqs);
+	return 0;
 }
 
 /* Find a particular kbase device (as specified by minor number), or find the "first" device if -1 is specified */
@@ -930,6 +942,12 @@ static int kbase_api_mem_alloc_ex(struct kbase_context *kctx,
 	if (!kbase_mem_allow_alloc(kctx))
 		return -EINVAL;
 
+	if (!mali_kbase_supports_reject_alloc_mem_dont_need(kctx->api_version))
+		flags &= ~BASE_MEM_DONT_NEED;
+
+	if (flags & ~BASE_MEM_FLAGS_ALLOC_INPUT_MASK)
+		return -EINVAL;
+
 	/* The driver counts the number of FIXABLE and FIXED allocations because
 	 * they're not supposed to happen at the same time. However, that is not
 	 * a security concern: nothing bad happens if the two types of allocations
@@ -1193,7 +1211,7 @@ static int kbase_api_mem_alias(struct kbase_context *kctx, union kbase_ioctl_mem
 	}
 
 	flags = alias->in.flags;
-	if (flags & BASE_MEM_FLAGS_KERNEL_ONLY) {
+	if (flags & ~BASE_MEM_FLAGS_ALIAS_INPUT_MASK) {
 		err = -EINVAL;
 		goto free_alloc;
 	}
@@ -1215,7 +1233,9 @@ static int kbase_api_mem_import(struct kbase_context *kctx, union kbase_ioctl_me
 	int ret;
 	base_mem_alloc_flags flags = import->in.flags;
 
-	if (flags & BASE_MEM_FLAGS_KERNEL_ONLY)
+	flags &= ~BASE_MEM_DONT_NEED;
+
+	if (flags & ~BASE_MEM_FLAGS_IMPORT_INPUT_MASK)
 		return -ENOMEM;
 
 	ret = kbase_mem_import(kctx, import->in.type, u64_to_user_ptr(import->in.phandle),
@@ -4775,6 +4795,11 @@ static int kbase_device_runtime_suspend(struct device *dev)
 
 	dev_dbg(dev, "Callback %s\n", __func__);
 	KBASE_KTRACE_ADD(kbdev, PM_RUNTIME_SUSPEND_CALLBACK, NULL, 0);
+
+	if (kbase_pm_is_active(kbdev)) {
+		dev_dbg(kbdev->dev, "Ignoring RT suspend callback as the device is still active");
+		return -EBUSY;
+	}
 
 	if (likely(kbdev->csf.scheduler.kthread_running)) {
 		atomic_set(&kbdev->csf.scheduler.pending_runtime_suspend_work, true);

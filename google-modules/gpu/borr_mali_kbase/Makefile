@@ -101,10 +101,6 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
                 CONFIG_MALI_REAL_HW = y
             endif
 
-            ifneq ($(CONFIG_ANDROID), y)
-                CONFIG_PAGE_MIGRATION_SUPPORT ?= y
-            endif
-
 
             ifeq ($(CONFIG_MALI_HW_ERRATA_1485982_NOT_AFFECTED), y)
                 # Prevent misuse when CONFIG_MALI_HW_ERRATA_1485982_NOT_AFFECTED=y
@@ -179,6 +175,7 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
     CONFIGS += \
         CONFIG_MALI_MIDGARD \
         CONFIG_MALI_GATOR_SUPPORT \
+        CONFIG_MALI_ARBITER_SUPPORT \
         CONFIG_MALI_ARBITRATION \
         CONFIG_MALI_PARTITION_MANAGER \
         CONFIG_MALI_REAL_HW \
@@ -188,7 +185,6 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
         CONFIG_MALI_DMA_BUF_LEGACY_COMPAT \
         CONFIG_MALI_EXPERT \
         CONFIG_MALI_CORESTACK \
-        CONFIG_PAGE_MIGRATION_SUPPORT \
         CONFIG_LARGE_PAGE_SUPPORT \
         CONFIG_MALI_PWRSOFT_765 \
         CONFIG_MALI_JOB_DUMP \
@@ -257,16 +253,16 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
     EXTRA_CFLAGS += -DCONFIG_MALI_NO_MALI_DEFAULT_GPU='\"$(CONFIG_MALI_NO_MALI_DEFAULT_GPU)\"'
 endif
 
-include $(KDIR)/../private/google-modules/soc/gs/Makefile.include
+include $(ROOT_DIR)/private/google-modules/soc/gs/Makefile.include
 
 #
 # KBUILD_EXTRA_SYMBOLS to prevent warnings about unknown functions
 #
-BASE_SYMBOLS = $(OUT_DIR)/../private/google-modules/gpu/mali_pixel/Module.symvers
+BASE_SYMBOLS = $(COMMON_OUT_DIR)/private/google-modules/gpu/mali_pixel/Module.symvers
 
 EXTRA_SYMBOLS += \
     $(BASE_SYMBOLS)
-EXTRA_SYMBOLS += $(OUT_DIR)/../private/google-modules/power/mitigation/Module.symvers
+EXTRA_SYMBOLS += $(COMMON_OUT_DIR)/private/google-modules/power/mitigation/Module.symvers
 
 CFLAGS_MODULE += -Wall -Werror
 
@@ -289,6 +285,8 @@ CFLAGS_MODULE += -Wno-sign-compare
 CFLAGS_MODULE += -Wno-shift-negative-value
 # This flag is needed to avoid build errors on older kernels
 CFLAGS_MODULE += $(call cc-option, -Wno-cast-function-type)
+# This flag was added on v6.6 kernel
+CFLAGS_MODULE += $(call cc-option,-Werror=designated-init)
 
 KBUILD_CPPFLAGS += -DKBUILD_EXTRA_WARN1
 

@@ -431,6 +431,7 @@ static int kbase_csf_reset_gpu_now(struct kbase_device *kbdev, bool firmware_ini
 {
 	unsigned long flags;
 	enum kbasep_soft_reset_status ret;
+	struct kbase_gpu_id_props *gpu_id = &kbdev->gpu_props.gpu_id;
 
 	WARN_ON(kbdev->irq_reset_flush);
 	/* The reset must now be happening otherwise other threads will not
@@ -459,7 +460,7 @@ static int kbase_csf_reset_gpu_now(struct kbase_device *kbdev, bool firmware_ini
 
 	cancel_work_sync(&kbdev->csf.firmware_reload_work);
 
-	{
+	if (gpu_id->arch_id < GPU_ID_ARCH_MAKE(14, 8, 0)) {
 		dev_dbg(kbdev->dev, "Disable GPU hardware counters.\n");
 		/* This call will block until counters are disabled. */
 		kbase_hwcnt_context_disable(kbdev->hwcnt_gpu_ctx);

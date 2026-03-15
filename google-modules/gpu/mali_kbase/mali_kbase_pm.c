@@ -67,6 +67,10 @@ kbasep_pm_context_active_handle_suspend_locked(struct kbase_device *kbdev,
 	 * so suspend request can be handled.
 	 */
 	r = kbase_arbiter_pm_ctx_active_handle_suspend(kbdev, suspend_handler, sched_lock_held);
+	if (r && (suspend_handler != KBASE_PM_SUSPEND_HANDLER_ALWAYS_INCREASE)) {
+		/* GPU couldn't be granted successfully, so bail out */
+		return r;
+	}
 
 	if (kbase_pm_is_suspending(kbdev)) {
 		switch (suspend_handler) {
