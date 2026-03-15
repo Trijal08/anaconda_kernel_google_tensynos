@@ -672,19 +672,17 @@ static inline bool is_csf_scheduler_protm_seq_completed(struct kbase_device *kbd
 	struct kbase_csf_protm_mem_pages_defer_ctrl *pages_defer_ctrl =
 		&kbdev->csf.scheduler.pages_defer_ctrl;
 	int cur_seq_nr;
-	int event_id;
 
 	/* By design, seq_nr >= 0, and is always <= MAX_PROTM_EVENT_SEQ_NR */
 	WARN_ONCE(seq_nr > MAX_PROTM_EVENT_SEQ_NR || seq_nr < 0,
 		  "Unexpected 'event_seq_number > MAX_PROTM_EVENT_SEQ_NR || event_seq_number < 0'");
 
-	event_id = atomic_read(&pages_defer_ctrl->protm_event_id);
-	cur_seq_nr = GET_PROTM_EVENT_ID_SEQ(event_id);
+	cur_seq_nr = GET_PROTM_EVENT_ID_SEQ(atomic_read(&pages_defer_ctrl->protm_event_id));
 	/* protm event sequence number is ever increasing, but could wrap back to 0 */
 	if (cur_seq_nr < seq_nr)
 		cur_seq_nr += MAX_PROTM_EVENT_SEQ_NR + 1;
 
-	return ((cur_seq_nr > seq_nr) || !(event_id & CSF_SCHED_PROTM_EVENT_FLAGS_MASK));
+	return cur_seq_nr > seq_nr;
 }
 
 /**
@@ -847,6 +845,20 @@ void kbase_csf_scheduler_force_wakeup(struct kbase_device *kbdev);
  * This function is only used for testing purpose.
  */
 void kbase_csf_scheduler_force_sleep(struct kbase_device *kbdev);
+
+/**
+ * kbase_csf_scheduler_revert_all_csg_suspension_preparation() - Revert the maintenance steps
+ *                                                               done before suspending all CSGs.
+ *
+ * @kbdev: Pointer to the device
+ *
+ * This function should be called if suspension of all CSGs must be aborted
+ * after calling prepare_all_csg_suspension(). This requirement does not apply
+ * in case of suspension failure, because the driver would trigger a GPU reset.
+ *
+ * Return: 0 on success, otherwise error.
+ */
+int kbase_csf_scheduler_revert_all_csg_suspension_preparation(struct kbase_device *kbdev);
 
 /**
  * kbase_csf_scheduler_check_gls_success() - Save CSG slots state after suspend

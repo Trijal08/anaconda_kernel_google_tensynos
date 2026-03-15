@@ -77,32 +77,20 @@ int kbase_csf_cpu_queue_dump_buffer(struct kbase_context *kctx, u64 buffer, size
 
 	rt_mutex_lock(&kctx->csf.lock);
 
+	kfree(kctx->csf.cpu_queue.buffer);
+
 	if (atomic_read(&kctx->csf.cpu_queue.dump_req_status) == BASE_CSF_CPU_QUEUE_DUMP_PENDING) {
-		kfree(kctx->csf.cpu_queue.buffer);
 		kctx->csf.cpu_queue.buffer = dump_buffer;
 		kctx->csf.cpu_queue.buffer_size = buf_size;
 		complete_all(&kctx->csf.cpu_queue.dump_cmp);
 	} else {
-		if (kctx->csf.cpu_queue.buffer != NULL) {
-			kfree(kctx->csf.cpu_queue.buffer);
-			kctx->csf.cpu_queue.buffer = NULL;
-		}
-
-		/* Dump print window not open to new input, discard the buffer */
 		kfree(dump_buffer);
+		kctx->csf.cpu_queue.buffer = NULL;
 	}
 
 	rt_mutex_unlock(&kctx->csf.lock);
 
 	return 0;
-}
-
-static bool kbasep_csf_cpu_queue_dump_wait_for_completion_timeout(struct kbase_context *kctx)
-{
-	bool timeout =
-		!wait_for_completion_timeout(&kctx->csf.cpu_queue.dump_cmp, msecs_to_jiffies(3000));
-
-	return timeout;
 }
 
 int kbasep_csf_cpu_queue_dump_print(struct kbase_context *kctx, struct kbasep_printer *kbpr)
@@ -124,7 +112,8 @@ int kbasep_csf_cpu_queue_dump_print(struct kbase_context *kctx, struct kbasep_pr
 	kbasep_print(kbpr, "CPU Queues table (version:v" __stringify(
 				   MALI_CSF_CPU_QUEUE_DUMP_VERSION) "):\n");
 
-	timed_out = kbasep_csf_cpu_queue_dump_wait_for_completion_timeout(kctx);
+	timed_out =
+		!wait_for_completion_timeout(&kctx->csf.cpu_queue.dump_cmp, msecs_to_jiffies(3000));
 	if (timed_out) {
 		dev_warn(kctx->kbdev->dev, "Wait for cpu_queue dump completion time_out");
 		kbasep_print(kbpr, "Failed to wait for completion of dump request\n");
@@ -134,6 +123,7 @@ int kbasep_csf_cpu_queue_dump_print(struct kbase_context *kctx, struct kbasep_pr
 	if (kctx->csf.cpu_queue.buffer) {
 		WARN_ON(atomic_read(&kctx->csf.cpu_queue.dump_req_status) !=
 			BASE_CSF_CPU_QUEUE_DUMP_PENDING);
+
 		/* The CPU queue dump is returned as a single formatted string */
 		kbasep_puts(kbpr, kctx->csf.cpu_queue.buffer);
 		kbasep_puts(kbpr, "\n");

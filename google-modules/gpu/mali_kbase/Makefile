@@ -246,16 +246,16 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
     EXTRA_CFLAGS += -DCONFIG_MALI_NO_MALI_DEFAULT_GPU=$(CONFIG_MALI_NO_MALI_DEFAULT_GPU)
 endif
 
-include $(ROOT_DIR)/private/google-modules/soc/gs/Makefile.include
+include $(KDIR)/../private/google-modules/soc/gs/Makefile.include
 
 #
 # KBUILD_EXTRA_SYMBOLS to prevent warnings about unknown functions
 #
-BASE_SYMBOLS = $(COMMON_OUT_DIR)/private/google-modules/gpu/mali_pixel/Module.symvers
+BASE_SYMBOLS = $(OUT_DIR)/../private/google-modules/gpu/mali_pixel/Module.symvers
 
 EXTRA_SYMBOLS += \
     $(BASE_SYMBOLS)
-EXTRA_SYMBOLS += $(COMMON_OUT_DIR)/private/google-modules/power/mitigation/Module.symvers
+EXTRA_SYMBOLS += $(OUT_DIR)/../private/google-modules/power/mitigation/Module.symvers
 
 # The following were added to align with W=1 in scripts/Makefile.extrawarn
 # from the Linux source tree (v5.18.14)

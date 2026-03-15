@@ -1017,6 +1017,9 @@ static int pm_handle_mcu_sleep_on_runtime_suspend(struct kbase_device *kbdev, bo
 		dev_dbg(kbdev->dev,
 			"Device became active on runtime suspend after suspending Scheduler");
 		suspension_aborted = true;
+		if (is_gpu_level_suspend_supported(kbdev) && !ret)
+			kbase_csf_scheduler_revert_all_csg_suspension_preparation(kbdev);
+
 		ret = -EBUSY;
 	} else if (is_gpu_level_suspend_supported(kbdev))
 		kbdev->pm.backend.gpu_sleep_mode_active = false;
@@ -1243,14 +1246,4 @@ out:
 	}
 
 	return ret;
-}
-
-void kbase_pm_cancel_pending_runtime_suspend(struct kbase_device *kbdev)
-{
-	struct kbase_csf_scheduler *const scheduler = &kbdev->csf.scheduler;
-
-	if (atomic_cmpxchg(&scheduler->pending_runtime_suspend_work, true, false) == true) {
-		kbdev->pm.runtime_suspend_result = -EBUSY;
-		wake_up_all(&kbdev->csf.event_wait);
-	}
 }

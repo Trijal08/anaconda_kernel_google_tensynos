@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2024-2025 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2024 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -25,6 +25,8 @@
 /* [Pixel-Mod Begin] Keeping for JM compatibility */
 #if MALI_USE_CSF
 #include "csf/mali_kbase_csf_mem_flags.h"
+#else
+#include "jm/mali_kbase_jm_mem_flags.h"
 #endif
 /* [Pixel-Mod End] */
 
@@ -159,16 +161,14 @@
  */
 #define BASE_MEM_FLAGS_NR_BITS 30
 
-/* A mask for all bits that are output from kbase, but never input. */
-#define BASE_MEM_FLAGS_OUTPUT_MASK BASE_MEM_NEED_MMAP
-
-/* [Pixel-Mod Begin] Keeping for JM compatibility */
-#if MALI_USE_CSF
 /* A mask of all the flags which are only valid within kbase,
  * and may not be passed to/from user space.
  */
 #define BASE_MEM_FLAGS_KERNEL_ONLY \
 	(~(((base_mem_alloc_flags)1 << (64 - BASEP_MEM_FLAGS_NR_BITS)) - 1))
+
+/* A mask for all bits that are output from kbase, but never input. */
+#define BASE_MEM_FLAGS_OUTPUT_MASK BASE_MEM_NEED_MMAP
 
 /* A mask for all bits that can be input to kbase. */
 #define BASE_MEM_FLAGS_INPUT_MASK                                     \
@@ -176,28 +176,8 @@
 	  BASE_MEM_FLAGS_KERNEL_ONLY) &                               \
 	 ~BASE_MEM_FLAGS_OUTPUT_MASK)
 
-/* Allowed flags with kbase mem_alias ioctl calls, violation rejected */
-#define BASE_MEM_FLAGS_ALIAS_INPUT_MASK (BASE_MEM_FLAGS_INPUT_MASK & ~BASE_MEM_FLAGS_KERNEL_ONLY)
-
-/* Allowed flags with kbase alloc ioctl calls, violation rejected */
-#define BASE_MEM_FLAGS_ALLOC_INPUT_MASK \
-	(BASE_MEM_FLAGS_INPUT_MASK & ~(BASE_MEM_FLAGS_KERNEL_ONLY | BASE_MEM_DONT_NEED))
-
-/* Allowed flags with kbase import iotcl calls, violation rejected */
-#define BASE_MEM_FLAGS_IMPORT_INPUT_MASK                                                   \
-	(BASE_MEM_FLAGS_INPUT_MASK & ~(BASE_MEM_FLAGS_KERNEL_ONLY | BASE_MEM_PROT_GPU_EX | \
-				       BASE_MEM_GROW_ON_GPF | BASE_MEM_FIXED | BASE_MEM_FIXABLE))
-
 /* A mask for all input and output bits */
 #define BASE_MEM_ALL_FLAGS_MASK (BASE_MEM_FLAGS_INPUT_MASK | BASE_MEM_FLAGS_OUTPUT_MASK)
-#else
-/* A mask for all input bits, including IN/OUT bits.
- */
-#define BASE_MEM_FLAGS_INPUT_MASK \
-	(((1 << BASE_MEM_FLAGS_NR_BITS) - 1) & ~BASE_MEM_FLAGS_OUTPUT_MASK)
-
-#endif
-/* [Pixel-Mod End] */
 
 /* Special base mem handles.
  */

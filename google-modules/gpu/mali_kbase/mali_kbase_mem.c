@@ -1000,7 +1000,7 @@ int kbase_mem_free_region(struct kbase_context *kctx, struct kbase_va_region *re
 	 * If the memory hasn't been reclaimed it will be unmapped and freed
 	 * below, if it has been reclaimed then the operations below are no-ops.
 	 */
-	if (reg->flags & KBASE_REG_DONT_NEED) {
+	if (reg->flags & BASEP_MEM_DONT_NEED) {
 		WARN_ON(reg->cpu_alloc->type != KBASE_MEM_TYPE_NATIVE);
 		mutex_lock(&kctx->jit_evict_lock);
 		/* Unlink the physical allocation before unmaking it evictable so
@@ -1196,9 +1196,6 @@ int kbase_update_region_flags(struct kbase_context *kctx, struct kbase_va_region
 		kbase_gpu_vm_lock(kctx);
 		kbase_va_region_no_user_free_inc(reg);
 		kbase_gpu_vm_unlock(kctx);
-
-		if (flags & BASE_MEM_DONT_NEED)
-			reg->flags |= KBASE_REG_DONT_NEED;
 	}
 
 	if (flags & BASE_MEM_GPU_VA_SAME_4GB_PAGE)
@@ -1208,8 +1205,7 @@ int kbase_update_region_flags(struct kbase_context *kctx, struct kbase_va_region
 		reg->flags |= KBASE_REG_FIXED_ADDRESS;
 
 	if (flags & BASEP_MEM_ACTIVE_JIT_ALLOC)
-		reg->flags |= KBASE_REG_ACTIVE_JIT_ALLOC;
-
+		reg->flags |= BASEP_MEM_ACTIVE_JIT_ALLOC;
 	return 0;
 }
 
@@ -1704,12 +1700,8 @@ static size_t free_partial(struct kbase_context *kctx, struct tagged_addr tp, bo
 	spin_lock(&kctx->mem_partials_lock);
 	clear_bit(p - head_page, sa->sub_pages);
 	if (bitmap_empty(sa->sub_pages, NUM_PAGES_IN_2MB_LARGE_PAGE)) {
-		struct kbase_mem_pool *pool = &kctx->mem_pools.large[sa->group_id];
-
 		list_del(&sa->link);
-		kbase_mem_pool_lock(pool);
-		kbase_mem_pool_free_locked(pool, head_page, false);
-		kbase_mem_pool_unlock(pool);
+		kbase_mem_pool_free(&kctx->mem_pools.large[sa->group_id], head_page, false);
 		kfree(sa);
 		nr_pages_to_account = NUM_PAGES_IN_2MB_LARGE_PAGE;
 	} else if (bitmap_weight(sa->sub_pages, NUM_PAGES_IN_2MB_LARGE_PAGE) ==
@@ -2159,6 +2151,11 @@ bool kbase_check_alloc_flags(struct kbase_context *kctx, unsigned long flags)
 		return false;
 
 	if ((flags & BASE_MEM_FIXABLE) && (flags & BASE_MEM_FIXED))
+		return false;
+
+	/* Cannot be set only allocation, only with base_mem_set */
+	if ((flags & BASE_MEM_DONT_NEED) &&
+	    (mali_kbase_supports_reject_alloc_mem_dont_need(kctx->api_version)))
 		return false;
 
 	/* Cannot directly allocate protected memory, it is imported instead */
@@ -3377,8 +3374,8 @@ void kbase_jit_free(struct kbase_context *kctx, struct kbase_va_region *reg)
 		return;
 	}
 	kbase_mem_evictable_mark_reclaim(reg->gpu_alloc);
-	reg->flags |= KBASE_REG_DONT_NEED;
-	reg->flags &= ~KBASE_REG_ACTIVE_JIT_ALLOC;
+	reg->flags |= BASEP_MEM_DONT_NEED;
+	reg->flags &= ~BASEP_MEM_ACTIVE_JIT_ALLOC;
 	kbase_mem_shrink_cpu_mapping(kctx, reg, 0, reg->gpu_alloc->nents);
 
 	/* Inactive JIT regions should be freed by the shrinker and not impacted

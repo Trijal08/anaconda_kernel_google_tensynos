@@ -571,7 +571,7 @@ int kbase_mem_query(struct kbase_context *kctx, u64 gpu_addr, u64 query, u64 *co
 		if (KBASE_REG_SHARE_IN & reg->flags)
 			*out |= BASE_MEM_COHERENT_LOCAL;
 		if (mali_kbase_supports_query_mem_dont_need(kctx->api_version)) {
-			if (KBASE_REG_DONT_NEED & reg->flags)
+			if (BASEP_MEM_DONT_NEED & reg->flags)
 				*out |= BASE_MEM_DONT_NEED;
 		}
 		if (mali_kbase_supports_query_mem_grow_on_gpf(kctx->api_version)) {
@@ -857,7 +857,7 @@ void kbase_mem_evictable_make(struct kbase_mem_phy_alloc *gpu_alloc)
 	mutex_unlock(&kctx->jit_evict_lock);
 	kbase_mem_evictable_mark_reclaim(gpu_alloc);
 
-	gpu_alloc->reg->flags |= KBASE_REG_DONT_NEED;
+	gpu_alloc->reg->flags |= BASEP_MEM_DONT_NEED;
 }
 
 bool kbase_mem_evictable_unmake(struct kbase_mem_phy_alloc *gpu_alloc)
@@ -920,7 +920,7 @@ bool kbase_mem_evictable_unmake(struct kbase_mem_phy_alloc *gpu_alloc)
 
 	/* If the region is still alive remove the DONT_NEED attribute. */
 	if (gpu_alloc->reg)
-		gpu_alloc->reg->flags &= ~KBASE_REG_DONT_NEED;
+		gpu_alloc->reg->flags &= ~BASEP_MEM_DONT_NEED;
 
 	return (err == 0);
 }
@@ -1019,7 +1019,7 @@ static int kbase_mem_flags_change_imported_umm(struct kbase_context *kctx,
 static int kbase_mem_flags_change_native(struct kbase_context *kctx, base_mem_alloc_flags flags,
 					 struct kbase_va_region *reg)
 {
-	bool kbase_reg_dont_need_flag = (KBASE_REG_DONT_NEED & reg->flags);
+	bool kbase_reg_dont_need_flag = (BASEP_MEM_DONT_NEED & reg->flags);
 	bool requested_dont_need_flag = (BASE_MEM_DONT_NEED & flags);
 	int ret = 0;
 
@@ -2174,7 +2174,7 @@ int kbase_mem_commit(struct kbase_context *kctx, u64 gpu_addr, u64 new_pages)
 	if (0 == (reg->flags & KBASE_REG_GROWABLE))
 		goto out_unlock;
 
-	if (reg->flags & KBASE_REG_ACTIVE_JIT_ALLOC)
+	if (reg->flags & BASEP_MEM_ACTIVE_JIT_ALLOC)
 		goto out_unlock;
 
 	/* Would overflow the VA region */
@@ -2462,7 +2462,7 @@ static vm_fault_t kbase_cpu_vm_fault(struct vm_fault *vmf)
 		goto exit;
 
 	/* Fault on access to DONT_NEED regions */
-	if (map->alloc->reg && (map->alloc->reg->flags & KBASE_REG_DONT_NEED))
+	if (map->alloc->reg && (map->alloc->reg->flags & BASEP_MEM_DONT_NEED))
 		goto exit;
 
 	/* We are inserting all valid pages from the start of CPU mapping and

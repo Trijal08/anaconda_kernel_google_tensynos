@@ -1607,16 +1607,8 @@ static int kbase_pm_mcu_update_state(struct kbase_device *kbdev)
 				wait_mcu_active(kbdev);
 				kbase_csf_firmware_trigger_mcu_halt(kbdev);
 				backend->mcu_state = KBASE_MCU_ON_PEND_HALT;
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
-			} else {
-				kbase_debug_coresight_csf_state_request(
-					kbdev, KBASE_DEBUG_CORESIGHT_CSF_ENABLED);
-				backend->mcu_state = KBASE_MCU_CORESIGHT_ENABLE;
-			}
-#else
 			} else
 				backend->mcu_state = KBASE_MCU_ON_HWCNT_ENABLE;
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
 			break;
 
 		case KBASE_MCU_ON_PEND_HALT:
@@ -1707,7 +1699,19 @@ static int kbase_pm_mcu_update_state(struct kbase_device *kbdev)
 				kbase_hwcnt_backend_csf_on_after_mcu_off(&kbdev->hwcnt_gpu_iface);
 				backend->mcu_state = KBASE_MCU_IN_SLEEP;
 				kbase_pm_enable_db_mirror_interrupt(kbdev);
-				kbase_csf_scheduler_reval_idleness_post_sleep(kbdev);
+				/* When Sleep-on-Idle is enabled if queues are kicked after
+				 * FW enters automatic sleep,FW would be woken up when host
+				 * handles the mirrored doorbell.
+				 * When GPU-level suspension is enabled,host confirms that
+				 * queues remain in an idle/blocked state in
+				 * scheduler_suspend_on_idle_gls() post-suspension.
+				 * So these two condition can ignore call of
+				 * scheduler_reval_idleness_post_sleep.
+				 */
+				if (!atomic_read(&kbdev->csf.scheduler.fw_soi_enabled) &&
+				    !is_gpu_level_suspend_supported(kbdev))
+					kbase_csf_scheduler_reval_idleness_post_sleep(kbdev);
+
 				/* Enable PM interrupt, after MCU has been put
 				 * to sleep, for the power down of L2.
 				 */
@@ -3253,13 +3257,6 @@ void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume)
 		ATRACE_END();
 		return;
 	}
-
-	/* Cancel any pending run-time suspend work item since on certain
-	 * platforms, such work items might prevent the GPU from being powered
-	 * on. A RT suspend callback invoked after this point would otherwise
-	 * immediately indicate busy.
-	 */
-	kbase_pm_cancel_pending_runtime_suspend(kbdev);
 
 	kbdev->poweroff_pending = false;
 

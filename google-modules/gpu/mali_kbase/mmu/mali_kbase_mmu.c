@@ -1110,7 +1110,7 @@ page_fault_retry:
 		goto fault_done;
 	}
 
-	if ((region->flags & KBASE_REG_DONT_NEED)) {
+	if ((region->flags & BASEP_MEM_DONT_NEED)) {
 		kbase_gpu_vm_unlock(kctx);
 		kbase_mmu_report_fault_and_kill(kctx, faulting_as,
 						"Don't need memory can't be grown", fault);
@@ -1216,7 +1216,7 @@ page_fault_retry:
 	pages_to_grow = 0;
 
 #if MALI_JIT_PRESSURE_LIMIT_BASE
-	if ((region->flags & KBASE_REG_ACTIVE_JIT_ALLOC) && !pages_trimmed) {
+	if ((region->flags & BASEP_MEM_ACTIVE_JIT_ALLOC) && !pages_trimmed) {
 		kbase_jit_request_phys_increase(kctx, new_pages);
 		pages_trimmed = new_pages;
 	}

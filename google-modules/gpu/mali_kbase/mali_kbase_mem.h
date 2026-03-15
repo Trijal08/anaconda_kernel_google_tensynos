@@ -189,15 +189,6 @@ static inline void kbase_process_page_usage_inc(struct kbase_context *kctx, int 
 
 #define KBASE_REG_PROTECTED (1ul << 19)
 
-/* Region belongs to a shrinker.
- *
- * This can either mean that it is part of the JIT/Ephemeral or tiler heap
- * shrinker paths. Should be removed only after making sure that there are
- * no references remaining to it in these paths, as it may cause the physical
- * backing of the region to disappear during use.
- */
-#define KBASE_REG_DONT_NEED (1ul << 20)
-
 /* Imported buffer is padded? */
 #define KBASE_REG_IMPORT_PAD (1ul << 21)
 
@@ -235,9 +226,6 @@ static inline void kbase_process_page_usage_inc(struct kbase_context *kctx, int 
  * otherwise it points to a u64 holding the lowest address of unused memory.
  */
 #define KBASE_REG_HEAP_INFO_IS_SIZE (1ul << 27)
-
-/* Allocation is actively used for JIT memory */
-#define KBASE_REG_ACTIVE_JIT_ALLOC (1ul << 28)
 
 /* This flag only applies to allocations in the EXEC_FIXED_VA and FIXED_VA
  * memory zones, and it determines whether they were created with a fixed
@@ -625,7 +613,7 @@ static inline struct kbase_mem_phy_alloc *kbase_mem_phy_alloc_put(struct kbase_m
  * @nr_pages:        The size of the region in pages.
  * @initial_commit:  Initial commit, for aligning the start address and
  *                   correctly growing KBASE_REG_TILER_ALIGN_TOP regions.
- * @flags:           KBASE_REG flags
+ * @flags:           Flags
  * @extension:    Number of pages allocated on page fault.
  * @cpu_alloc: The physical memory we mmap to the CPU when mapping this region.
  * @gpu_alloc: The physical memory we mmap to the GPU when mapping this region.
@@ -661,7 +649,7 @@ struct kbase_va_region {
 	void *user_data;
 	size_t nr_pages;
 	size_t initial_commit;
-	unsigned long flags;
+	base_mem_alloc_flags flags;
 	size_t extension;
 	struct kbase_mem_phy_alloc *cpu_alloc;
 	struct kbase_mem_phy_alloc *gpu_alloc;
@@ -737,7 +725,7 @@ static inline bool kbase_is_region_invalid_or_free(struct kbase_va_region *reg)
  */
 static inline bool kbase_is_region_shrinkable(struct kbase_va_region *reg)
 {
-	return (reg->flags & KBASE_REG_DONT_NEED) || (reg->flags & KBASE_REG_ACTIVE_JIT_ALLOC);
+	return (reg->flags & BASEP_MEM_DONT_NEED) || (reg->flags & BASEP_MEM_ACTIVE_JIT_ALLOC);
 }
 
 void kbase_remove_va_region(struct kbase_device *kbdev, struct kbase_va_region *reg);
