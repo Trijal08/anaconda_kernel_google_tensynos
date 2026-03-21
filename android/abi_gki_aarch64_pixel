@@ -2946,3 +2946,4 @@
   zs_map_object
   zs_pool_stats
   zs_unmap_object
+  __tty_port_tty_hangup
