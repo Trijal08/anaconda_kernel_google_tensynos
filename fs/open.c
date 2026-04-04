@@ -421,12 +421,6 @@ static const struct cred *access_override_creds(void)
 	return old_cred;
 }
 
-#ifdef CONFIG_KSU_SUSFS
-extern struct static_key_true ksu_su_compat_enabled;
-extern bool __ksu_is_allow_uid_for_current(uid_t uid);
-extern int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *__unused_flags);
-#endif
-
 static long do_faccessat(int dfd, const char __user *filename, int mode, int flags)
 {
 	struct path path;
@@ -434,9 +428,6 @@ static long do_faccessat(int dfd, const char __user *filename, int mode, int fla
 	int res;
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
 	const struct cred *old_cred = NULL;
-#ifdef CONFIG_KSU_SUSFS
-	struct filename *fname = NULL;
-#endif
 
 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
 		return -EINVAL;
@@ -456,23 +447,7 @@ static long do_faccessat(int dfd, const char __user *filename, int mode, int fla
 	}
 
 retry:
-#ifdef CONFIG_KSU_SUSFS
-	fname = getname_flags(filename, lookup_flags, NULL);
-
-	if (likely(susfs_is_current_proc_no_su()))
-		goto orig_flow;
-
-	if (static_branch_likely(&ksu_su_compat_enabled)) {
-		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
-			ksu_handle_faccessat(&dfd, &fname, &mode, NULL);
-	}
-
-orig_flow:
-	res = filename_lookup(dfd, fname, lookup_flags, &path, NULL);
-	putname(fname);
-#else
 	res = user_path_at(dfd, filename, lookup_flags, &path);
-#endif
 	if (res)
 		goto out;
 
