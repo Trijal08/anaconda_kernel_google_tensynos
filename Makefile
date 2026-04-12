@@ -1066,6 +1066,10 @@ KBUILD_CFLAGS += $(call cc-disable-warning, stringop-overflow)
 # Another good warning that we'll want to enable eventually
 KBUILD_CFLAGS += $(call cc-disable-warning, restrict)
 
+# Disable const unsafe warnings in Clang 22
+KBUILD_CFLAGS += -Wno-default-const-init-var-unsafe \
+                 -Wno-default-const-init-field-unsafe
+
 # Enabled with W=2, disabled by default as noisy
 ifdef CONFIG_CC_IS_GCC
 KBUILD_CFLAGS += -Wno-maybe-uninitialized
