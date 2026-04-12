@@ -79,6 +79,29 @@
  
 #define MAGIC_MOUNT_WORKDIR "/debug_ramdisk/workdir"
 
+static inline bool susfs_starts_with(const char *str, const char *prefix) {
+    while (*prefix) {
+        if (*str++ != *prefix++)
+            return false;
+    }
+    return true;
+}
+
+static inline bool susfs_ends_with(const char *str, const char *suffix) {
+	size_t str_len, suffix_len;
+
+	if (!str || !suffix)
+		return false;
+
+	str_len = strlen(str);
+	suffix_len = strlen(suffix);
+
+	if (suffix_len > str_len)
+		return false;
+
+	return !strcmp(str + str_len - suffix_len, suffix);
+}
+
 static inline bool susfs_is_current_proc_umounted(void) {
 	return test_ti_thread_flag(&current->thread_info, TIF_PROC_UMOUNTED);
 }

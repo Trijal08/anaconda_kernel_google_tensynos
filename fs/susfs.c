@@ -34,14 +34,6 @@ bool susfs_is_log_enabled __read_mostly = true;
 #define SUSFS_LOGE(fmt, ...) 
 #endif
 
-bool susfs_starts_with(const char *str, const char *prefix) {
-    while (*prefix) {
-        if (*str++ != *prefix++)
-            return false;
-    }
-    return true;
-}
-
 #ifndef FUSE_SUPER_MAGIC
 #define FUSE_SUPER_MAGIC 0x65735546
 #endif
@@ -1360,14 +1352,29 @@ static int watch_one_dir(struct watch_dir *wd)
  * synchronize_srcu on the same SRCU struct, causing a permanent deadlock).
  * Cleanup is deferred to a delayed_work that runs outside the SRCU context.
  */
-static int susfs_handle_sdcard_inode_event(struct fsnotify_group *group,
-											struct inode *to_tell,
-											struct fsnotify_mark *inode_mark,
-											struct fsnotify_mark *vfsmount_mark,
-											u32 mask, const void *data, int data_type,
-											const unsigned char *file_name, u32 cookie,
-											struct fsnotify_iter_info *iter_info)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+/* Modern Kernels (5.15, 6.1, etc.) */
+int susfs_handle_sdcard_inode_event(struct fsnotify_group *group,
+									u32 mask, const void *data, int data_type,
+									struct inode *dir, const struct qstr *name,
+									u32 cookie, struct fsnotify_iter_info *iter_info)
+#else
+/* Legacy Kernels (4.9, 4.14, 5.10) */
+int susfs_handle_sdcard_inode_event(struct fsnotify_group *group,
+									struct inode *inode,
+									struct fsnotify_mark *inode_mark,
+									struct fsnotify_mark *fanotify_mark,
+									u32 mask, const void *data, int data_type,
+									const unsigned char *file_name, u32 cookie,
+									struct fsnotify_iter_info *iter_info)
+#endif
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+	/* For Modern Kernels (5.11, 5.15, 6.1) */
+	/* We extract the string from the qstr struct so the old code can read it */
+	const unsigned char *file_name = (name) ? name->name : NULL;
+#endif
+
 	if (!file_name || strlen(file_name) != 7 ||
 	    memcmp(file_name, "Android", 7))
 		return 0;
@@ -1397,7 +1404,11 @@ static int add_mark_on_inode(struct inode *inode, u32 mask,
 	fsnotify_init_mark(m, g);
 	m->mask = mask;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+	if (fsnotify_add_inode_mark(m, inode, 0)) {
+#else
 	if (fsnotify_add_mark(m, inode, NULL, 0)) {
+#endif
 		fsnotify_put_mark(m);
 		return -EINVAL;
 	}
