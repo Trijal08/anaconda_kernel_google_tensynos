@@ -56,7 +56,7 @@ struct st_susfs_hide_sus_mnts_for_non_su_procs {
 	bool                                    enabled;
 	int                                     err;
 };
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+#endif
 
 /* sus_kstat */
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
@@ -99,6 +99,20 @@ struct st_susfs_sus_kstat_hlist {
 	bool                                    is_fuse;
 	struct st_susfs_sus_kstat               info;
 	struct hlist_node                       node;
+};
+#endif
+
+/* try_umount */
+#ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
+struct st_susfs_try_umount {
+	char                                    target_pathname[SUSFS_MAX_LEN_PATHNAME];
+	int                                     mnt_mode;
+	int                                     err;
+};
+
+struct st_susfs_try_umount_list {
+	struct list_head                        list;
+	struct st_susfs_try_umount              info;
 };
 #endif
 
@@ -199,7 +213,14 @@ void susfs_set_hide_sus_mnts_for_non_su_procs(void __user **user_info);
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 void susfs_add_sus_kstat(void __user **user_info);
 void susfs_update_sus_kstat(void __user **user_info);
+void susfs_sus_ino_for_generic_fillattr(unsigned long ino, struct kstat *stat);
+void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, unsigned long *out_ino);
 #endif
+/* try_umount */
+#ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
+void susfs_add_try_umount(void __user **user_info);
+void susfs_try_umount(uid_t uid);
+#endif // #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
 
 /* spoof_uname */
 #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
