@@ -9,3 +9,7 @@
 	path = KernelSU
 	url = https://github.com/Trijal08/KernelSU.git
 	branch = master-susfs
+[submodule "vpnhide"]
+	path = vpnhide
+	url = https://github.com/okhsunrog/vpnhide.git
+	branch = main
