@@ -13,3 +13,7 @@
 	path = vpnhide
 	url = https://github.com/okhsunrog/vpnhide.git
 	branch = main
+[submodule "fs/ntfs"]
+	path = fs/ntfs
+	url = https://github.com/namjaejeon/linux-ntfs.git
+	branch = main
