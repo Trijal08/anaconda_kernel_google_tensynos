@@ -70,6 +70,7 @@ struct vm_fault;
  * Flags from 0x1000 up are for file system specific usage:
  */
 #define IOMAP_F_PRIVATE		0x1000
+#define IOMAP_F_STALE		(1U << 15)
 
 
 /*
@@ -89,9 +90,10 @@ struct iomap {
 	struct dax_device	*dax_dev; /* dax_dev for dax operations */
 	void			*inline_data;
 	void			*private; /* filesystem private */
+	u64			validity_cookie; /* used with .iomap_valid() */
 	const struct iomap_page_ops *page_ops;
 
-	ANDROID_KABI_RESERVE(1);
+	// ANDROID_KABI_RESERVE(1);
 };
 
 static inline sector_t iomap_sector(const struct iomap *iomap, loff_t pos)
@@ -131,6 +133,23 @@ struct iomap_page_ops {
 	int (*page_prepare)(struct inode *inode, loff_t pos, unsigned len);
 	void (*page_done)(struct inode *inode, loff_t pos, unsigned copied,
 			struct page *page);
+
+	/*
+	 * Check that the cached iomap still maps correctly to the filesystem's
+	 * internal extent map. FS internal extent maps can change while iomap
+	 * is iterating a cached iomap, so this hook allows iomap to detect that
+	 * the iomap needs to be refreshed during a long running write
+	 * operation.
+	 *
+	 * The filesystem can store internal state (e.g. a sequence number) in
+	 * iomap->validity_cookie when the iomap is first mapped to be able to
+	 * detect changes between mapping time and whenever .iomap_valid() is
+	 * called.
+	 *
+	 * This is called with the folio over the specified file position held
+	 * locked by the iomap code.
+	 */
+	bool (*iomap_valid)(struct inode *inode, const struct iomap *iomap);
 };
 
 /*
