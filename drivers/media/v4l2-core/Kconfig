@@ -89,3 +89,9 @@ config VIDEOBUF_VMALLOC
 config VIDEOBUF_DMA_CONTIG
 	tristate
 	select VIDEOBUF_GEN
+
+config VIDEO_V4L2_LOOPBACK
+	tristate "V4L2 loopback video device"
+	depends on VIDEO_DEV
+	help
+	  This module allows you to create "virtual video devices".
