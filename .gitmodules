@@ -17,3 +17,7 @@
 	path = fs/ntfs
 	url = https://github.com/namjaejeon/linux-ntfs.git
 	branch = main
+[submodule "v4l2loopback"]
+	path = v4l2loopback
+	url = https://github.com/v4l2loopback/v4l2loopback.git
+	branch = main
