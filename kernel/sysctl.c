@@ -83,10 +83,10 @@
 #endif
 
 /* shared constants to be used in various sysctls */
-const int sysctl_vals[] __read_only = { 0, 1, 2, 3, 4, 100, 200, 1000, 3000, INT_MAX, 65535, -1 };
+int sysctl_vals[] = { 0, 1, 2, 3, 4, 100, 200, 1000, 3000, INT_MAX, 65535, -1 };
 EXPORT_SYMBOL(sysctl_vals);
 
-const unsigned long sysctl_long_vals[] __read_only = { 0, 1, LONG_MAX };
+unsigned long sysctl_long_vals[] = { 0, 1, LONG_MAX };
 EXPORT_SYMBOL_GPL(sysctl_long_vals);
 
 #if defined(CONFIG_SYSCTL)
@@ -94,7 +94,7 @@ EXPORT_SYMBOL_GPL(sysctl_long_vals);
 /* Constants used for minimum and maximum */
 
 #ifdef CONFIG_PERF_EVENTS
-static const int six_hundred_forty_kb __read_only = 640 * 1024;
+static int six_hundred_forty_kb = 640 * 1024;
 #endif
 
 

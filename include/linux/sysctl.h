@@ -53,13 +53,13 @@ struct ctl_dir;
 #define SYSCTL_MAXOLDUID		((void *)&sysctl_vals[10])
 #define SYSCTL_NEG_ONE			((void *)&sysctl_vals[11])
 
-extern const int sysctl_vals[];
+extern int sysctl_vals[];
 
 #define SYSCTL_LONG_ZERO	((void *)&sysctl_long_vals[0])
 #define SYSCTL_LONG_ONE		((void *)&sysctl_long_vals[1])
 #define SYSCTL_LONG_MAX		((void *)&sysctl_long_vals[2])
 
-extern const unsigned long sysctl_long_vals[];
+extern unsigned long sysctl_long_vals[];
 
 typedef int proc_handler(struct ctl_table *ctl, int write, void *buffer,
 		size_t *lenp, loff_t *ppos);
