@@ -83,10 +83,10 @@
 #endif
 
 /* shared constants to be used in various sysctls */
-const int sysctl_vals[] __read_only = { 0, 1, 2, 3, 4, 100, 200, 1000, 3000, INT_MAX, 65535, -1 };
+ int sysctl_vals[] __ro_after_init = { 0, 1, 2, 3, 4, 100, 200, 1000, 3000, INT_MAX, 65535, -1 };
 EXPORT_SYMBOL(sysctl_vals);
 
-const unsigned long sysctl_long_vals[] __read_only = { 0, 1, LONG_MAX };
+ unsigned long sysctl_long_vals[] __ro_after_init = { 0, 1, LONG_MAX };
 EXPORT_SYMBOL_GPL(sysctl_long_vals);
 
 #if defined(CONFIG_SYSCTL)
@@ -94,12 +94,12 @@ EXPORT_SYMBOL_GPL(sysctl_long_vals);
 /* Constants used for minimum and maximum */
 
 #ifdef CONFIG_PERF_EVENTS
-static const int six_hundred_forty_kb __read_only = 640 * 1024;
+static int six_hundred_forty_kb __ro_after_init = 640 * 1024;
 #endif
 
 
-static const int ngroups_max __read_only = NGROUPS_MAX;
-static const int cap_last_cap __read_only = CAP_LAST_CAP;
+static int ngroups_max __ro_after_init = NGROUPS_MAX;
+static int cap_last_cap __ro_after_init = CAP_LAST_CAP;
 
 #ifdef CONFIG_PROC_SYSCTL
 
