@@ -94,7 +94,7 @@ CONFIG_CP15_BARRIER_EMULATION=y
 CONFIG_SETEND_EMULATION=y
 CONFIG_RANDOMIZE_BASE=y
 # CONFIG_RANDOMIZE_MODULE_REGION_FULL is not set
-CONFIG_CMDLINE="console=ttynull stack_depot_disable=on cgroup_disable=pressure kasan.page_alloc.sample=10 kasan.stacktrace=off kvm-arm.mode=nvhe bootconfig ioremap_guard"
+CONFIG_CMDLINE="console=ttynull stack_depot_disable=on cgroup_disable=pressure kasan.page_alloc.sample=10 kasan.stacktrace=off kvm-arm.mode=nvhe bootconfig ioremap_guard v4l2loopback.devices=2 v4l2loopback.card_label=\"Front Camera,Back Camera\" v4l2loopback.exclusive_caps=1,1 v4l2loopback.max_buffers=2,2"
 CONFIG_CMDLINE_EXTEND=y
 # CONFIG_EFI is not set
 CONFIG_PM_USERSPACE_AUTOSLEEP=y
@@ -463,6 +463,7 @@ CONFIG_MEDIA_SUPPORT=y
 # CONFIG_MEDIA_RADIO_SUPPORT is not set
 # CONFIG_MEDIA_SDR_SUPPORT is not set
 # CONFIG_MEDIA_TEST_SUPPORT is not set
+CONFIG_VIDEO_V4L2_LOOPBACK=y
 CONFIG_MEDIA_USB_SUPPORT=y
 CONFIG_USB_GSPCA=y
 CONFIG_USB_VIDEO_CLASS=y
