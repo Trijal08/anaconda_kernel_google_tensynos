@@ -120,7 +120,10 @@
 #define DIFF_CODE_DATA_REG_NOT 0x14734
 
 #define ABS(val) ((val < 0) ? -(val) : val)
+
+#if (KERNEL_VERSION(6, 1, 155) > LINUX_VERSION_CODE)
 #define MAX(a, b) ((a > b) ? a : b)
+#endif
 
 /* short threshold, drv-drv, drv-sen, sen-sen, drv-gnd, sen-gnd, avdd */
 static u8 short_circuit_threshold[] = { 10, 200, 200, 200, 200, 200, 30 };

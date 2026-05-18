@@ -99,7 +99,10 @@ static uint32_t index;
 /* factory test */
 #define DISCARD_FRAME_NUMS 6
 #define ABS(x) (((x) >= 0) ? (x) : -(x))
+
+#if (KERNEL_VERSION(6, 1, 155) > LINUX_VERSION_CODE)
 #define MAX(a, b) ((a > b) ? a : b)
+#endif
 
 #define GTP_CAP_TEST 1
 #define GTP_DELTA_TEST 2
