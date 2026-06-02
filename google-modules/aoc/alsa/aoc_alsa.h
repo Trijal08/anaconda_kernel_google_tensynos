@@ -72,6 +72,24 @@ enum uc_device_id {
 #define AOC_COMPR_HRTIMER_IRQ_HANDLER_BYPASS
 #define DEFAULT_PCM_WAIT_TIME_IN_MSECS 10000
 #define DEFAULT_VOICE_PCM_WAIT_TIME_IN_MSECS 500
+
+/*
+ * Convert a millisecond PCM wait time into the value expected by
+ * substream->wait_time on the running kernel.
+ *
+ * Before v6.1.167 (upstream commit 3ed2b549b39f "ALSA: pcm: fix wait_time
+ * calculations") the PCM core used substream->wait_time directly as a jiffies
+ * count. From that version on the field is interpreted as milliseconds and the
+ * core converts it to jiffies itself, so a value pre-converted with
+ * msecs_to_jiffies() would be converted twice and yield a far too short
+ * timeout (e.g. audio skipping). Store the value in the unit the running
+ * kernel expects.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 167)
+#define AOC_PCM_WAIT_TIME(ms) (ms)
+#else
+#define AOC_PCM_WAIT_TIME(ms) msecs_to_jiffies(ms)
+#endif
 #define COMPR_OFFLOAD_GAIN_RESET_TIME_DELAY_IN_MSECS 150
 #define COMPR_INVALID_METADATA (-1)
 
