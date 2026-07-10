@@ -98,8 +98,8 @@ static int six_hundred_forty_kb = 640 * 1024;
 #endif
 
 
-static const int ngroups_max __read_only = NGROUPS_MAX;
-static const int cap_last_cap __read_only = CAP_LAST_CAP;
+static int ngroups_max __read_only = NGROUPS_MAX;
+static int cap_last_cap __read_only = CAP_LAST_CAP;
 
 #ifdef CONFIG_PROC_SYSCTL
 
