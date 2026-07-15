@@ -28,8 +28,13 @@ edgetpu-objs	:= edgetpu-dmabuf.o \
 		   edgetpu-thermal.o \
 		   edgetpu-wakelock.o
 
+ifdef CONFIG_TRACEPOINTS
+edgetpu-objs	+= edgetpu-trace.o
+
 ifdef CONFIG_EDGETPU_TELEMETRY_TRACE
-edgetpu-objs	+= edgetpu-telemetry.o edgetpu-trace.o
+edgetpu-objs	+= edgetpu-telemetry.o
+endif
+
 endif
 
 edgetpu-objs	+= $(GCIP_DIR)/gcip.o
