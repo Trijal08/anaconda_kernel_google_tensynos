@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 
-lib-objs := clear_page.o copy_page.o memcpy.o memset.o tishift.o
+lib-objs := clear_page.o copy_page.o memcpy.o memset.o
 lib-objs := $(addprefix ../../../lib/, $(lib-objs))
 
 hyp-obj-y := timer-sr.o sysreg-sr.o debug-sr.o switch.o tlb.o hyp-init.o host.o \
