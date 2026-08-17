@@ -13,17 +13,24 @@
 #define CMD_SUSFS_SET_ANDROID_DATA_ROOT_PATH 0x55551 /* deprecated */
 #define CMD_SUSFS_SET_SDCARD_ROOT_PATH 0x55552 /* deprecated */
 #define CMD_SUSFS_ADD_SUS_PATH_LOOP 0x55553
+#define CMD_SUSFS_ADD_SUS_PATH_UID 0x55554 /* per-app: full-size copy incl. target_uid */
+#define CMD_SUSFS_ADD_SUS_PATH_LOOP_UID 0x55555 /* per-app: full-size copy incl. target_uid */
 #define CMD_SUSFS_ADD_SUS_MOUNT 0x55560 /* deprecated */
 #define CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS 0x55561
+#define CMD_SUSFS_HIDE_SUS_MNTS_FOR_UID 0x55563 /* per-app: full-size copy incl. target_uid */
 #define CMD_SUSFS_UMOUNT_FOR_ZYGOTE_ISO_SERVICE 0x55562 /* deprecated */
 #define CMD_SUSFS_ADD_SUS_KSTAT 0x55570
 #define CMD_SUSFS_UPDATE_SUS_KSTAT 0x55571
 #define CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY 0x55572
+#define CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY_UID 0x55573 /* per-app: full-size copy incl. target_uid */
 #define CMD_SUSFS_ADD_TRY_UMOUNT 0x55580 /* deprecated */
 #define CMD_SUSFS_SET_UNAME 0x55590
+#define CMD_SUSFS_SET_UNAME_UID 0x55591 /* per-app: full-size copy incl. target_uid */
 #define CMD_SUSFS_ENABLE_LOG 0x555a0
 #define CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG 0x555b0
+#define CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG_UID 0x555b1 /* per-app: full-size copy incl. target_uid */
 #define CMD_SUSFS_ADD_OPEN_REDIRECT 0x555c0
+#define CMD_SUSFS_ADD_OPEN_REDIRECT_UID 0x555c1 /* per-app: full-size copy incl. target_uid */
 #define CMD_SUSFS_SHOW_VERSION 0x555e1
 #define CMD_SUSFS_SHOW_ENABLED_FEATURES 0x555e2
 #define CMD_SUSFS_SHOW_VARIANT 0x555e3
@@ -32,6 +39,7 @@
 #define CMD_SUSFS_SUS_SU 0x60000 /* deprecated */
 #define CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING 0x60010
 #define CMD_SUSFS_ADD_SUS_MAP 0x60020
+#define CMD_SUSFS_ADD_SUS_MAP_UID 0x60021 /* per-app: full-size copy incl. target_uid */
 
 #define SUSFS_MAX_LEN_PATHNAME 256 // 256 should address many paths already unless you are doing some strange experimental stuff, then set your own desired length
 #define SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE 8192 // 8192 is enough I guess
@@ -106,10 +114,20 @@ static inline bool susfs_is_current_proc_umounted_app(void) {
 			current_uid().val >= 10000);
 }
 
+/* per-app sus_map: true if a per-uid rule exists for this inode and the current
+ * uid is NOT among its targets (i.e. do NOT hide the map for this process). */
+struct inode;
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+bool susfs_sus_map_uid_excluded(struct inode *inode);
+#else
+static inline bool susfs_sus_map_uid_excluded(struct inode *inode) { return false; }
+#endif
+
 #define SUSFS_IS_INODE_SUS_MAP(inode) \
 		inode && inode->i_mapping && \
 		unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_mapping->flags)) && \
-		susfs_is_current_proc_umounted_app()
+		susfs_is_current_proc_umounted_app() && \
+		!susfs_sus_map_uid_excluded(inode)
 
 #define SUSFS_IS_INODE_OPEN_REDIRECT_WITHOUT_UID_CHECK(inode) \
 		inode && inode->i_mapping && \
