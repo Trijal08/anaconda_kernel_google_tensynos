@@ -1014,6 +1014,10 @@ static void do_sys_times(struct tms *tms)
 	tms->tms_cstime = nsec_to_clock_t(cstime);
 }
 
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern long susfs_uptime_offset_for_current(void);
+#endif
+
 SYSCALL_DEFINE1(times, struct tms __user *, tbuf)
 {
 	if (tbuf) {
@@ -1024,7 +1028,22 @@ SYSCALL_DEFINE1(times, struct tms __user *, tbuf)
 			return -EFAULT;
 	}
 	force_successful_syscall_return();
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	/* per-uid uptime spoof: times(2) returns ticks-since-boot, another uptime leak */
+	{
+		long __uoff = susfs_uptime_offset_for_current();
+		long __ret = (long) jiffies_64_to_clock_t(get_jiffies_64());
+		if (__uoff > 0)
+			__ret += (long) nsec_to_clock_t((u64)__uoff * NSEC_PER_SEC);
+		else if (__uoff < 0)
+			__ret -= (long) nsec_to_clock_t((u64)(-__uoff) * NSEC_PER_SEC);
+		if (__ret < 0)
+			__ret = 0;
+		return __ret;
+	}
+#else
 	return (long) jiffies_64_to_clock_t(get_jiffies_64());
+#endif
 }
 
 #ifdef CONFIG_COMPAT
@@ -1049,7 +1068,21 @@ COMPAT_SYSCALL_DEFINE1(times, struct compat_tms __user *, tbuf)
 			return -EFAULT;
 	}
 	force_successful_syscall_return();
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	{
+		long __uoff = susfs_uptime_offset_for_current();
+		long __ret = (long) compat_jiffies_to_clock_t(jiffies);
+		if (__uoff > 0)
+			__ret += (long) nsec_to_clock_t((u64)__uoff * NSEC_PER_SEC);
+		else if (__uoff < 0)
+			__ret -= (long) nsec_to_clock_t((u64)(-__uoff) * NSEC_PER_SEC);
+		if (__ret < 0)
+			__ret = 0;
+		return __ret;
+	}
+#else
 	return compat_jiffies_to_clock_t(jiffies);
+#endif
 }
 #endif
 
@@ -2747,6 +2780,17 @@ static int do_sysinfo(struct sysinfo *info)
 	ktime_get_boottime_ts64(&tp);
 	timens_add_boottime(&tp);
 	info->uptime = tp.tv_sec + (tp.tv_nsec ? 1 : 0);
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	/* per-uid uptime spoof for sysinfo(2), same offset as /proc/uptime */
+	{
+		long __uoff = susfs_uptime_offset_for_current();
+		if (__uoff) {
+			info->uptime += __uoff;
+			if ((long)info->uptime < 0)
+				info->uptime = 0;
+		}
+	}
+#endif
 
 	get_avenrun(info->loads, 0, SI_LOAD_SHIFT - FSHIFT);
 

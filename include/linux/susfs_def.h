@@ -23,6 +23,8 @@
 #define CMD_SUSFS_UPDATE_SUS_KSTAT 0x55571
 #define CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY 0x55572
 #define CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY_UID 0x55573 /* per-app: full-size copy incl. target_uid */
+#define CMD_SUSFS_SET_FILE_TIME_OFFSET_UID 0x55574 /* per-app: shift owned files' timestamps by offset_sec */
+#define CMD_SUSFS_SET_UPTIME_OFFSET_UID 0x55575 /* per-app: shift /proc/uptime by offset_sec */
 #define CMD_SUSFS_ADD_TRY_UMOUNT 0x55580 /* deprecated */
 #define CMD_SUSFS_SET_UNAME 0x55590
 #define CMD_SUSFS_SET_UNAME_UID 0x55591 /* per-app: full-size copy incl. target_uid */
