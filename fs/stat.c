@@ -37,6 +37,7 @@ extern bool __ksu_is_allow_uid_for_current(uid_t uid);
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
 extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat, u32 result_mask);
+extern void susfs_sus_kstat_apply_file_time_offset(struct kstat *stat);
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 
 /**
@@ -154,6 +155,9 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 		int err = inode->i_op->getattr(mnt_userns, path, stat,
 				request_mask, query_flags);
 		if (!err) {
+			/* per-uid file-time offset applies to every stat; the
+			 * sus_kstat spoof below may still override the times */
+			susfs_sus_kstat_apply_file_time_offset(stat);
 			if (stat->result_mask & STATX_SUS_KSTAT) {
 				susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT);
 				return err;
@@ -167,11 +171,13 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 	}
 	if (stat->result_mask & STATX_SUS_KSTAT) {
 		generic_fillattr(mnt_userns, inode, stat);
+		susfs_sus_kstat_apply_file_time_offset(stat);
 		susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT);
 		return 0;
 	}
 	if (stat->result_mask & STATX_SUS_KSTAT_FUSE) {
 		generic_fillattr(mnt_userns, inode, stat);
+		susfs_sus_kstat_apply_file_time_offset(stat);
 		susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT_FUSE);
 		return 0;
 	}
@@ -180,6 +186,9 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 					    request_mask, query_flags);
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 	generic_fillattr(mnt_userns, inode, stat);
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	susfs_sus_kstat_apply_file_time_offset(stat);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(vfs_getattr_nosec);
