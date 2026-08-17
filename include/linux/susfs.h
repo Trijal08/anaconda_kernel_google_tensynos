@@ -36,11 +36,25 @@ enum UID_SCHEME {
 /**********/
 /* STRUCT */
 /**********/
+/* generic per-uid companion entry, keyed by inode (ino+dev). Shared by the
+ * inode-flag features (sus_path, sus_map) to add optional per-app targeting on
+ * top of the global inode flag: a rule means "hide only for target_uid". */
+struct st_susfs_ino_uid_hlist {
+	unsigned long                           target_ino;
+	unsigned long                           target_dev;
+	int                                     target_uid;
+	struct hlist_node                       node;
+};
+
 /* sus_path */
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 struct st_susfs_sus_path {
 	char                                    target_pathname[SUSFS_MAX_LEN_PATHNAME];
 	int                                     err;
+	/* per-app targeting, APPENDED AFTER err to keep the legacy ABI byte-stable.
+	 * 0 = global (legacy: hide for every umounted app); >0 = hide only for
+	 * current_uid().val == it. Populated only via the *_UID commands. */
+	int                                     target_uid;
 };
 
 struct st_susfs_sus_path_list {
@@ -55,6 +69,16 @@ struct st_susfs_sus_path_list {
 struct st_susfs_hide_sus_mnts_for_non_su_procs {
 	bool                                    enabled;
 	int                                     err;
+	/* per-app targeting, APPENDED AFTER err to keep the legacy ABI byte-stable.
+	 * The *_UID command adds target_uid to a per-uid hide-set; the legacy 0/1
+	 * command toggles the global state as before. */
+	int                                     target_uid;
+};
+
+/* generic uid-only per-app entry (hide-set membership) */
+struct st_susfs_uid_hlist {
+	int                                     target_uid;
+	struct hlist_node                       node;
 };
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 
@@ -91,6 +115,11 @@ struct st_susfs_sus_kstat {
 	long                                    spoofed_blksize;
 	int                                     flags;
 	int                                     err;
+	/* per-app targeting, APPENDED AFTER err to keep the legacy ABI byte-stable.
+	 * 0 = any uid (global, legacy); >0 = spoof only when current_uid().val == it.
+	 * Populated only via CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY_UID (full-size copy);
+	 * legacy commands copy up to offsetof(target_uid), so old callers are unaffected. */
+	int                                     target_uid;
 };
 
 struct st_susfs_sus_kstat_hlist {
@@ -122,7 +151,22 @@ struct st_susfs_uname {
 	char                                    release[__NEW_UTS_LEN+1];
 	char                                    version[__NEW_UTS_LEN+1];
 	int                                     err;
+	/* per-app targeting, APPENDED AFTER err to keep the legacy ABI byte-stable.
+	 * 0 = global (legacy: applies to every process); >0 = only current_uid().val == it.
+	 * Populated only via CMD_SUSFS_SET_UNAME_UID (full-size copy); the legacy command
+	 * copies up to offsetof(target_uid) and sets the global fallback as before. */
+	int                                     target_uid;
 };
+
+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+/* per-uid uname override, keyed by target_uid */
+struct st_susfs_uname_uid_hlist {
+	int                                     target_uid;
+	char                                    release[__NEW_UTS_LEN+1];
+	char                                    version[__NEW_UTS_LEN+1];
+	struct hlist_node                       node;
+};
+#endif
 #endif
 
 /* enable_log */
@@ -138,6 +182,17 @@ struct st_susfs_log {
 struct st_susfs_spoof_cmdline_or_bootconfig {
 	char                                    fake_cmdline_or_bootconfig[SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE];
 	int                                     err;
+	/* per-app targeting, APPENDED AFTER err to keep the legacy ABI byte-stable.
+	 * 0 = global (legacy); >0 = only current_uid().val == it. Populated only via
+	 * CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG_UID (full-size copy). */
+	int                                     target_uid;
+};
+
+/* per-uid cmdline/bootconfig override, keyed by target_uid */
+struct st_susfs_cmdline_uid_hlist {
+	int                                     target_uid;
+	char                                    *fake;
+	struct hlist_node                       node;
 };
 #endif
 
@@ -148,6 +203,11 @@ struct st_susfs_open_redirect {
 	char                                    redirected_pathname[SUSFS_MAX_LEN_PATHNAME];
 	int                                     uid_scheme;
 	int                                     err;
+	/* per-app targeting, APPENDED AFTER err to keep the legacy ABI byte-stable.
+	 * 0 = any uid (global, legacy); >0 = redirect only when current_uid().val == it
+	 * (evaluated in addition to uid_scheme). Populated only via
+	 * CMD_SUSFS_ADD_OPEN_REDIRECT_UID; legacy command copies up to offsetof(target_uid). */
+	int                                     target_uid;
 };
 
 struct st_susfs_open_redirect_hlist {
@@ -168,6 +228,9 @@ struct st_susfs_open_redirect_hlist {
 struct st_susfs_sus_map {
 	char                                    target_pathname[SUSFS_MAX_LEN_PATHNAME];
 	int                                     err;
+	/* per-app targeting, APPENDED AFTER err to keep the legacy ABI byte-stable.
+	 * 0 = global (legacy); >0 = hide only for current_uid().val == it. */
+	int                                     target_uid;
 };
 #endif
 
@@ -200,18 +263,19 @@ struct st_susfs_version {
 /***********************/
 /* sus_path */
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-void susfs_add_sus_path(void __user **user_info);
-void susfs_add_sus_path_loop(void __user **user_info);
+void susfs_add_sus_path(void __user **user_info, bool with_uid);
+void susfs_add_sus_path_loop(void __user **user_info, bool with_uid);
 #endif
 
 /* sus_mount */
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-void susfs_set_hide_sus_mnts_for_non_su_procs(void __user **user_info);
+void susfs_set_hide_sus_mnts_for_non_su_procs(void __user **user_info, bool with_uid);
+bool susfs_sus_mount_hidden_for_current(void);
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 
 /* sus_kstat */
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-void susfs_add_sus_kstat(void __user **user_info);
+void susfs_add_sus_kstat(void __user **user_info, bool with_uid);
 void susfs_update_sus_kstat(void __user **user_info);
 #endif
 
@@ -223,7 +287,7 @@ void susfs_try_umount(uid_t uid);
 
 /* spoof_uname */
 #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
-void susfs_set_uname(void __user **user_info);
+void susfs_set_uname(void __user **user_info, bool with_uid);
 void susfs_spoof_uname(struct new_utsname* tmp);
 #endif
 
@@ -234,17 +298,17 @@ void susfs_enable_log(void __user **user_info);
 
 /* spoof_cmdline_or_bootconfig */
 #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
-void susfs_set_cmdline_or_bootconfig(void __user **user_info);
+void susfs_set_cmdline_or_bootconfig(void __user **user_info, bool with_uid);
 #endif
 
 /* open_redirect */
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
-void susfs_add_open_redirect(void __user **user_info);
+void susfs_add_open_redirect(void __user **user_info, bool with_uid);
 #endif
 
 /* sus_map */
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
-void susfs_add_sus_map(void __user **user_info);
+void susfs_add_sus_map(void __user **user_info, bool with_uid);
 #endif
 
 void susfs_set_avc_log_spoofing(void __user **user_info);

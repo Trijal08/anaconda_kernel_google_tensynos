@@ -43,15 +43,64 @@ DEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);
 DEFINE_STATIC_SRCU(susfs_srcu_sus_path_loop);
 static DEFINE_MUTEX(susfs_mutex_lock_sus_path);
 static LIST_HEAD(LH_SUS_PATH_LOOP);
+/* per-uid companion table for sus_path, keyed by inode ino */
+static DEFINE_HASHTABLE(SUS_PATH_UID_HLIST, 8);
+static DEFINE_SPINLOCK(susfs_sus_path_uid_lock);
+
+/* add/replace a per-uid rule (ino,dev) -> target_uid; multiple uids per ino
+ * coexist (hide for the union of those uids) */
+static void susfs_sus_path_uid_add(unsigned long ino, unsigned long dev, int target_uid) {
+	struct st_susfs_ino_uid_hlist *new_entry, *tmp_entry;
+	struct hlist_node *tmp_node;
+
+	new_entry = kzalloc(sizeof(*new_entry), GFP_KERNEL);
+	if (!new_entry)
+		return;
+	new_entry->target_ino = ino;
+	new_entry->target_dev = dev;
+	new_entry->target_uid = target_uid;
+
+	spin_lock(&susfs_sus_path_uid_lock);
+	hash_for_each_possible_safe(SUS_PATH_UID_HLIST, tmp_entry, tmp_node, node, ino) {
+		if (tmp_entry->target_ino == ino && tmp_entry->target_dev == dev &&
+			tmp_entry->target_uid == target_uid) {
+			hash_del(&tmp_entry->node);
+			kfree(tmp_entry);
+		}
+	}
+	hash_add(SUS_PATH_UID_HLIST, &new_entry->node, ino);
+	spin_unlock(&susfs_sus_path_uid_lock);
+}
+
+/* true if a per-uid rule exists for this inode and current uid is not a target
+ * (so this process must NOT have the path hidden) */
+static bool susfs_sus_path_uid_excluded(struct inode *inode) {
+	struct st_susfs_ino_uid_hlist *e;
+	unsigned long ino = inode->i_ino;
+	unsigned long dev = inode->i_sb->s_dev;
+	uid_t cur = current_uid().val;
+	bool has_rule = false, uid_match = false;
+
+	spin_lock(&susfs_sus_path_uid_lock);
+	hash_for_each_possible(SUS_PATH_UID_HLIST, e, node, ino) {
+		if (e->target_ino == ino && e->target_dev == dev) {
+			has_rule = true;
+			if (e->target_uid == cur) { uid_match = true; break; }
+		}
+	}
+	spin_unlock(&susfs_sus_path_uid_lock);
+	return has_rule && !uid_match;
+}
 const struct qstr susfs_fake_qstr_name = QSTR_INIT("..5.u.S", 7); // used to re-test the dcache lookup, make sure you don't have file named like this!!
 
-void susfs_add_sus_path(void __user **user_info) {
+void susfs_add_sus_path(void __user **user_info, bool with_uid) {
 	struct st_susfs_sus_path info = {0};
 	struct path path;
 	struct inode *inode = NULL;
 	struct fuse_inode *fi = NULL;
 
-	if (copy_from_user(&info, (struct st_susfs_sus_path __user*)*user_info, sizeof(info))) {
+	if (copy_from_user(&info, (struct st_susfs_sus_path __user*)*user_info,
+			with_uid ? sizeof(info) : offsetof(struct st_susfs_sus_path, target_uid))) {
 		info.err = -EFAULT;
 		goto out_copy_to_user;
 	}
@@ -78,13 +127,17 @@ void susfs_add_sus_path(void __user **user_info) {
 		}
 		set_bit(AS_FLAGS_SUS_PATH, &fi->inode.i_mapping->flags);
 		set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
-		SUSFS_LOGI("flagged AS_FLAGS_SUS_PATH on pathname: '%s', fi->nodeid: %llu, fi->inode.i_ino: %lu, fi->inode.i_mapping->flags: 0x%lx\n", 
+		if (with_uid && info.target_uid > 0)
+			susfs_sus_path_uid_add(inode->i_ino, inode->i_sb->s_dev, info.target_uid);
+		SUSFS_LOGI("flagged AS_FLAGS_SUS_PATH on pathname: '%s', fi->nodeid: %llu, fi->inode.i_ino: %lu, fi->inode.i_mapping->flags: 0x%lx\n",
 					info.target_pathname, fi->nodeid, fi->inode.i_ino, fi->inode.i_mapping->flags);
 		info.err = 0;
 		goto out_path_put_path;
 	}
 
 	set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
+	if (with_uid && info.target_uid > 0)
+		susfs_sus_path_uid_add(inode->i_ino, inode->i_sb->s_dev, info.target_uid);
 	SUSFS_LOGI("flagged AS_FLAGS_SUS_PATH on pathname: '%s', ino: '%lu', inode->i_mapping->flags: 0x%lx\n",
 				info.target_pathname, inode->i_ino, inode->i_mapping->flags);
 	info.err = 0;
@@ -97,11 +150,12 @@ out_copy_to_user:
 	SUSFS_LOGI("CMD_SUSFS_ADD_SUS_PATH -> ret: %d\n", info.err);
 }
 
-void susfs_add_sus_path_loop(void __user **user_info) {
+void susfs_add_sus_path_loop(void __user **user_info, bool with_uid) {
 	struct st_susfs_sus_path_list *new_list = NULL;
 	struct st_susfs_sus_path info = {0};
 
-	if (copy_from_user(&info, (struct st_susfs_sus_path __user*)*user_info, sizeof(info))) {
+	if (copy_from_user(&info, (struct st_susfs_sus_path __user*)*user_info,
+			with_uid ? sizeof(info) : offsetof(struct st_susfs_sus_path, target_uid))) {
 		info.err = -EFAULT;
 		goto out_copy_to_user;
 	}
@@ -119,6 +173,7 @@ void susfs_add_sus_path_loop(void __user **user_info) {
 	}
 	strscpy(new_list->info.target_pathname, info.target_pathname, SUSFS_MAX_LEN_PATHNAME - 1);
 	strscpy(new_list->target_pathname, info.target_pathname, SUSFS_MAX_LEN_PATHNAME - 1);
+	new_list->info.target_uid = (with_uid && info.target_uid > 0) ? info.target_uid : 0;
 	INIT_LIST_HEAD(&new_list->list);
 	mutex_lock(&susfs_mutex_lock_sus_path);
 	list_add_tail_rcu(&new_list->list, &LH_SUS_PATH_LOOP);
@@ -158,10 +213,14 @@ static void susfs_run_sus_path_loop(void) {
 				}
 				set_bit(AS_FLAGS_SUS_PATH, &fi->inode.i_mapping->flags);
 				set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
+				if (cursor->info.target_uid > 0)
+					susfs_sus_path_uid_add(inode->i_ino, inode->i_sb->s_dev, cursor->info.target_uid);
 				SUSFS_LOGI("re-flag AS_FLAGS_SUS_PATH on path '%s', fi->inode.i_ino: '%lu', fi->inode.i_mapping->flags: 0x%lx\n",
 						cursor->target_pathname, fi->inode.i_ino, fi->inode.i_mapping->flags);
 			} else {
 				set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
+				if (cursor->info.target_uid > 0)
+					susfs_sus_path_uid_add(inode->i_ino, inode->i_sb->s_dev, cursor->info.target_uid);
 				SUSFS_LOGI("re-flag AS_FLAGS_SUS_PATH on path '%s', inode->i_ino: '%lu', inode->i_mapping->flags: 0x%lx\n",
 						cursor->target_pathname, inode->i_ino, inode->i_mapping->flags);
 			}
@@ -210,6 +269,8 @@ bool susfs_is_inode_sus_path(struct inode *inode)
 			is_i_uid_not_allowed(fi->inode.i_uid.val)))
 #endif
 		{
+			if (susfs_sus_path_uid_excluded(inode))
+				return false;
 			SUSFS_LOGI("hiding path with ino '%lu'\n", inode->i_ino);
 			return true;
 		}
@@ -226,6 +287,8 @@ bool susfs_is_inode_sus_path(struct inode *inode)
 		is_i_uid_not_allowed(inode->i_uid.val)))
 #endif
 	{
+		if (susfs_sus_path_uid_excluded(inode))
+			return false;
 		SUSFS_LOGI("hiding path with ino '%lu'\n", inode->i_ino);
 		return true;
 	}
@@ -242,20 +305,72 @@ int susfs_get_data_path(struct path *path) {
 // - Default to false now so zygisk can pick up the sus mounts without the need to turn it off manually in post-fs-data stage
 //   otherwise user needs to turn it on in post-fs-data stage and turn it off in boot-completed stage
 DEFINE_STATIC_KEY_FALSE(susfs_is_hide_sus_mnts_for_non_su_procs_enabled);
+static bool susfs_sus_mount_global_on = false;
+/* per-uid hide-set: uids for which sus mounts are hidden even if the global
+ * toggle is off */
+static DEFINE_HASHTABLE(SUS_MOUNT_UID_HLIST, 5);
+static DEFINE_SPINLOCK(susfs_sus_mount_uid_lock);
 
-void susfs_set_hide_sus_mnts_for_non_su_procs(void __user **user_info) {
+/* master static key = global_on || any per-uid entry present */
+static void susfs_sus_mount_recompute_key(void) {
+	if (susfs_sus_mount_global_on || !hash_empty(SUS_MOUNT_UID_HLIST))
+		static_branch_enable(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled);
+	else
+		static_branch_disable(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled);
+}
+
+/* true if sus mounts should be hidden from the current process (global or per-uid) */
+bool susfs_sus_mount_hidden_for_current(void) {
+	struct st_susfs_uid_hlist *e;
+	uid_t cur = current_uid().val;
+	bool hide = false;
+
+	if (READ_ONCE(susfs_sus_mount_global_on))
+		return true;
+	spin_lock(&susfs_sus_mount_uid_lock);
+	hash_for_each_possible(SUS_MOUNT_UID_HLIST, e, node, cur) {
+		if (e->target_uid == cur) { hide = true; break; }
+	}
+	spin_unlock(&susfs_sus_mount_uid_lock);
+	return hide;
+}
+
+void susfs_set_hide_sus_mnts_for_non_su_procs(void __user **user_info, bool with_uid) {
 	struct st_susfs_hide_sus_mnts_for_non_su_procs info = {0};
 
-	if (copy_from_user(&info, (struct st_susfs_hide_sus_mnts_for_non_su_procs __user*)*user_info, sizeof(info))) {
+	if (copy_from_user(&info, (struct st_susfs_hide_sus_mnts_for_non_su_procs __user*)*user_info,
+			with_uid ? sizeof(info)
+			         : offsetof(struct st_susfs_hide_sus_mnts_for_non_su_procs, target_uid))) {
 		info.err = -EFAULT;
 		goto out_copy_to_user;
 	}
-	
-	if (info.enabled) {
-		static_branch_enable(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled);
+
+	if (with_uid && info.target_uid > 0) {
+		/* per-uid: add target_uid to the hide-set */
+		struct st_susfs_uid_hlist *new_entry, *tmp_entry;
+		struct hlist_node *tmp_node;
+
+		new_entry = kzalloc(sizeof(*new_entry), GFP_KERNEL);
+		if (!new_entry) {
+			info.err = -ENOMEM;
+			goto out_copy_to_user;
+		}
+		new_entry->target_uid = info.target_uid;
+		spin_lock(&susfs_sus_mount_uid_lock);
+		hash_for_each_possible_safe(SUS_MOUNT_UID_HLIST, tmp_entry, tmp_node, node, info.target_uid) {
+			if (tmp_entry->target_uid == info.target_uid) {
+				hash_del(&tmp_entry->node);
+				kfree(tmp_entry);
+			}
+		}
+		hash_add(SUS_MOUNT_UID_HLIST, &new_entry->node, info.target_uid);
+		spin_unlock(&susfs_sus_mount_uid_lock);
+		SUSFS_LOGI("added uid %d to sus_mount hide-set\n", info.target_uid);
 	} else {
-		static_branch_disable(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled);
+		/* legacy global toggle */
+		susfs_sus_mount_global_on = info.enabled;
 	}
+	susfs_sus_mount_recompute_key();
 
 	SUSFS_LOGI("susfs_is_hide_sus_mnts_for_non_su_procs_enabled: %d\n", static_key_enabled(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled));
 	info.err = 0;
@@ -318,12 +433,13 @@ out_path_put_path:
 	return 0;
 }
 
-void susfs_add_sus_kstat(void __user **user_info) {
+void susfs_add_sus_kstat(void __user **user_info, bool with_uid) {
 	struct st_susfs_sus_kstat info = {0};
 	struct st_susfs_sus_kstat_hlist *new_entry, *tmp_entry;
 	struct hlist_node *tmp_hlist_node;
 
-	if (copy_from_user(&info, (struct st_susfs_sus_kstat __user*)*user_info, sizeof(info))) {
+	if (copy_from_user(&info, (struct st_susfs_sus_kstat __user*)*user_info,
+			with_uid ? sizeof(info) : offsetof(struct st_susfs_sus_kstat, target_uid))) {
 		info.err = -EFAULT;
 		goto out_copy_to_user;
 	}
@@ -438,7 +554,8 @@ void susfs_update_sus_kstat(void __user **user_info) {
 	struct hlist_node *tmp_hlist_node;
 	int bkt;
 
-	if (copy_from_user(&info, (struct st_susfs_sus_kstat __user*)*user_info, sizeof(info))) {
+	if (copy_from_user(&info, (struct st_susfs_sus_kstat __user*)*user_info,
+			offsetof(struct st_susfs_sus_kstat, target_uid))) {
 		info.err = -EFAULT;
 		goto out_copy_to_user;
 	}
@@ -525,7 +642,9 @@ out_spoof_kstat:
 	rcu_read_lock();
 	hash_for_each_possible_rcu(SUS_KSTAT_HLIST, entry, node, target_ino) {
 		if (entry->target_dev == target_dev &&
-			entry->is_fuse == is_fuse)
+			entry->is_fuse == is_fuse &&
+			(entry->info.target_uid <= 0 ||
+			 entry->info.target_uid == current_uid().val))
 		{
 			SUSFS_LOGI("spoofing kstat for path: %s, target_ino: %lu, target_dev: %u\n",
 					entry->info.target_pathname, target_ino, target_dev);
@@ -598,7 +717,9 @@ out_spoof_kstat:
 	rcu_read_lock();
 	hash_for_each_possible_rcu(SUS_KSTAT_HLIST, entry, node, target_ino) {
 		if (entry->target_dev == target_dev &&
-			entry->is_fuse == is_fuse)
+			entry->is_fuse == is_fuse &&
+			(entry->info.target_uid <= 0 ||
+			 entry->info.target_uid == current_uid().val))
 		{
 			SUSFS_LOGI("spoofing kstat for target_ino: %lu, target_dev: %u\n", target_ino, target_dev);
 			*out_dev = entry->info.spoofed_dev;
@@ -670,13 +791,20 @@ void susfs_try_umount(uid_t uid) {
 /* spoof_uname */
 #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
 static struct st_susfs_uname my_uname = {0};
+static bool susfs_uname_global_set = false;
 DEFINE_STATIC_KEY_FALSE(susfs_is_uname_spoof_buffer_set);
 static DEFINE_SEQLOCK(susfs_uname_seqlock);
+/* per-uid uname overrides, checked before the global fallback */
+static DEFINE_HASHTABLE(SUS_UNAME_UID_HLIST, 5);
+static DEFINE_SPINLOCK(susfs_uname_uid_lock);
 
-void susfs_set_uname(void __user **user_info) {
+void susfs_set_uname(void __user **user_info, bool with_uid) {
 	struct st_susfs_uname info = {0};
+	char new_release[__NEW_UTS_LEN+1];
+	char new_version[__NEW_UTS_LEN+1];
 
-	if (copy_from_user(&info, (struct st_susfs_uname __user*)*user_info, sizeof(info))) {
+	if (copy_from_user(&info, (struct st_susfs_uname __user*)*user_info,
+			with_uid ? sizeof(info) : offsetof(struct st_susfs_uname, target_uid))) {
 		info.err = -EFAULT;
 		goto out_copy_to_user;
 	}
@@ -686,24 +814,54 @@ void susfs_set_uname(void __user **user_info) {
 		goto out_copy_to_user;
 	}
 
-	write_seqlock(&susfs_uname_seqlock);
-	if (!strcmp(info.release, "default")) {
-		strscpy(my_uname.release, utsname()->release, __NEW_UTS_LEN);
+	/* resolve "default" against the real uname, per field */
+	if (!strcmp(info.release, "default"))
+		strscpy(new_release, utsname()->release, __NEW_UTS_LEN);
+	else
+		strscpy(new_release, info.release, __NEW_UTS_LEN);
+	if (!strcmp(info.version, "default"))
+		strscpy(new_version, utsname()->version, __NEW_UTS_LEN);
+	else
+		strscpy(new_version, info.version, __NEW_UTS_LEN);
+
+	if (with_uid && info.target_uid > 0) {
+		/* per-uid override: replace any existing entry for this uid */
+		struct st_susfs_uname_uid_hlist *new_entry, *tmp_entry;
+		struct hlist_node *tmp_node;
+
+		new_entry = kzalloc(sizeof(*new_entry), GFP_KERNEL);
+		if (!new_entry) {
+			info.err = -ENOMEM;
+			goto out_copy_to_user;
+		}
+		new_entry->target_uid = info.target_uid;
+		strscpy(new_entry->release, new_release, __NEW_UTS_LEN);
+		strscpy(new_entry->version, new_version, __NEW_UTS_LEN);
+
+		spin_lock(&susfs_uname_uid_lock);
+		hash_for_each_possible_safe(SUS_UNAME_UID_HLIST, tmp_entry, tmp_node, node, info.target_uid) {
+			if (tmp_entry->target_uid == info.target_uid) {
+				hash_del(&tmp_entry->node);
+				kfree(tmp_entry);
+			}
+		}
+		hash_add(SUS_UNAME_UID_HLIST, &new_entry->node, info.target_uid);
+		spin_unlock(&susfs_uname_uid_lock);
+		SUSFS_LOGI("set per-uid spoofed uname for uid %d, release: '%s', version: '%s'\n",
+					info.target_uid, new_release, new_version);
 	} else {
-		strscpy(my_uname.release, info.release, __NEW_UTS_LEN);
+		/* legacy global fallback (uid 0 / any) */
+		write_seqlock(&susfs_uname_seqlock);
+		strscpy(my_uname.release, new_release, __NEW_UTS_LEN);
+		strscpy(my_uname.version, new_version, __NEW_UTS_LEN);
+		susfs_uname_global_set = true;
+		write_sequnlock(&susfs_uname_seqlock);
+		SUSFS_LOGI("set global spoofed release: '%s', version: '%s'\n",
+					my_uname.release, my_uname.version);
 	}
-	if (!strcmp(info.version, "default")) {
-		strscpy(my_uname.version, utsname()->version, __NEW_UTS_LEN);
-	} else {
-		strscpy(my_uname.version, info.version, __NEW_UTS_LEN);
-	}
-	write_sequnlock(&susfs_uname_seqlock);
 
 	if (!static_key_enabled(&susfs_is_uname_spoof_buffer_set))
 		static_branch_enable(&susfs_is_uname_spoof_buffer_set);
-
-	SUSFS_LOGI("set spoofed release: '%s', version: '%s'\n",
-				my_uname.release, my_uname.version);
 
 	info.err = 0;
 out_copy_to_user:
@@ -714,7 +872,28 @@ out_copy_to_user:
 }
 
 void susfs_spoof_uname(struct new_utsname* tmp) {
+	struct st_susfs_uname_uid_hlist *entry;
+	uid_t cur = current_uid().val;
 	unsigned seq;
+	bool found = false;
+
+	/* per-uid override takes precedence over the global fallback */
+	spin_lock(&susfs_uname_uid_lock);
+	hash_for_each_possible(SUS_UNAME_UID_HLIST, entry, node, cur) {
+		if (entry->target_uid == cur) {
+			strscpy(tmp->release, entry->release, __NEW_UTS_LEN);
+			strscpy(tmp->version, entry->version, __NEW_UTS_LEN);
+			found = true;
+			break;
+		}
+	}
+	spin_unlock(&susfs_uname_uid_lock);
+	if (found)
+		return;
+
+	/* no per-uid entry: use the global only if it was explicitly set, else leave real */
+	if (!READ_ONCE(susfs_uname_global_set))
+		return;
 
 	do {
 		seq = read_seqbegin(&susfs_uname_seqlock);
@@ -754,10 +933,14 @@ out_copy_to_user:
 /* spoof_cmdline_or_bootconfig */
 #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
 static char *fake_cmdline_or_bootconfig = NULL;
+static bool susfs_cmdline_global_set = false;
 DEFINE_STATIC_KEY_FALSE(susfs_is_fake_cmdline_or_bootconfig_buffer_set);
 static DEFINE_SEQLOCK(susfs_fake_cmdline_or_bootconfig_seqlock);
+/* per-uid cmdline/bootconfig overrides, checked before the global fallback */
+static DEFINE_HASHTABLE(SUS_CMDLINE_UID_HLIST, 5);
+static DEFINE_SPINLOCK(susfs_cmdline_uid_lock);
 
-void susfs_set_cmdline_or_bootconfig(void __user **user_info) {
+void susfs_set_cmdline_or_bootconfig(void __user **user_info, bool with_uid) {
 	struct st_susfs_spoof_cmdline_or_bootconfig *info = (struct st_susfs_spoof_cmdline_or_bootconfig *)kzalloc(sizeof(struct st_susfs_spoof_cmdline_or_bootconfig), GFP_KERNEL);
 	int err = 0;
 
@@ -769,7 +952,9 @@ void susfs_set_cmdline_or_bootconfig(void __user **user_info) {
 		return;
 	}
 
-	if (copy_from_user(info, (struct st_susfs_spoof_cmdline_or_bootconfig __user*)*user_info, sizeof(struct st_susfs_spoof_cmdline_or_bootconfig))) {
+	if (copy_from_user(info, (struct st_susfs_spoof_cmdline_or_bootconfig __user*)*user_info,
+			with_uid ? sizeof(struct st_susfs_spoof_cmdline_or_bootconfig)
+			         : offsetof(struct st_susfs_spoof_cmdline_or_bootconfig, target_uid))) {
 		info->err = -EFAULT;
 		goto out_copy_to_user;
 	}
@@ -779,23 +964,58 @@ void susfs_set_cmdline_or_bootconfig(void __user **user_info) {
 		goto out_copy_to_user;
 	}
 
-	if (!fake_cmdline_or_bootconfig) {
-		fake_cmdline_or_bootconfig = (char *)kzalloc(SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE, GFP_KERNEL);
-		if (!fake_cmdline_or_bootconfig) {
+	if (with_uid && info->target_uid > 0) {
+		/* per-uid override: replace any existing entry for this uid */
+		struct st_susfs_cmdline_uid_hlist *new_entry, *tmp_entry;
+		struct hlist_node *tmp_node;
+		char *buf;
+
+		buf = (char *)kzalloc(SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE, GFP_KERNEL);
+		if (!buf) {
 			info->err = -ENOMEM;
 			goto out_copy_to_user;
 		}
-	}
+		strscpy(buf, info->fake_cmdline_or_bootconfig, SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE - 1);
+		new_entry = kzalloc(sizeof(*new_entry), GFP_KERNEL);
+		if (!new_entry) {
+			kfree(buf);
+			info->err = -ENOMEM;
+			goto out_copy_to_user;
+		}
+		new_entry->target_uid = info->target_uid;
+		new_entry->fake = buf;
 
-	write_seqlock(&susfs_fake_cmdline_or_bootconfig_seqlock);
-	strscpy(fake_cmdline_or_bootconfig,
-			info->fake_cmdline_or_bootconfig,
-			SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE - 1);
-	write_sequnlock(&susfs_fake_cmdline_or_bootconfig_seqlock);
+		spin_lock(&susfs_cmdline_uid_lock);
+		hash_for_each_possible_safe(SUS_CMDLINE_UID_HLIST, tmp_entry, tmp_node, node, info->target_uid) {
+			if (tmp_entry->target_uid == info->target_uid) {
+				hash_del(&tmp_entry->node);
+				kfree(tmp_entry->fake);
+				kfree(tmp_entry);
+			}
+		}
+		hash_add(SUS_CMDLINE_UID_HLIST, &new_entry->node, info->target_uid);
+		spin_unlock(&susfs_cmdline_uid_lock);
+		SUSFS_LOGI("per-uid fake_cmdline_or_bootconfig set for uid %d\n", info->target_uid);
+	} else {
+		/* legacy global fallback (uid 0 / any) */
+		if (!fake_cmdline_or_bootconfig) {
+			fake_cmdline_or_bootconfig = (char *)kzalloc(SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE, GFP_KERNEL);
+			if (!fake_cmdline_or_bootconfig) {
+				info->err = -ENOMEM;
+				goto out_copy_to_user;
+			}
+		}
+		write_seqlock(&susfs_fake_cmdline_or_bootconfig_seqlock);
+		strscpy(fake_cmdline_or_bootconfig,
+				info->fake_cmdline_or_bootconfig,
+				SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE - 1);
+		susfs_cmdline_global_set = true;
+		write_sequnlock(&susfs_fake_cmdline_or_bootconfig_seqlock);
+		SUSFS_LOGI("global fake_cmdline_or_bootconfig is set\n");
+	}
 
 	if (!static_key_enabled(&susfs_is_fake_cmdline_or_bootconfig_buffer_set))
 		static_branch_enable(&susfs_is_fake_cmdline_or_bootconfig_buffer_set);
-	SUSFS_LOGI("fake_cmdline_or_bootconfig is set\n");
 
 	info->err = 0;
 
@@ -810,13 +1030,35 @@ out_copy_to_user:
 	}
 }
 
-void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m) {
+bool susfs_spoof_cmdline_or_bootconfig(struct seq_file *m) {
+	struct st_susfs_cmdline_uid_hlist *entry;
+	uid_t cur = current_uid().val;
+	bool found = false;
 	unsigned seq;
+
+	/* per-uid override takes precedence over the global fallback */
+	spin_lock(&susfs_cmdline_uid_lock);
+	hash_for_each_possible(SUS_CMDLINE_UID_HLIST, entry, node, cur) {
+		if (entry->target_uid == cur) {
+			seq_puts(m, entry->fake);
+			found = true;
+			break;
+		}
+	}
+	spin_unlock(&susfs_cmdline_uid_lock);
+	if (found)
+		return true;
+
+	/* no per-uid entry: use the global only if it was explicitly set,
+	 * else return false so the caller emits the real cmdline/bootconfig */
+	if (!READ_ONCE(susfs_cmdline_global_set) || !fake_cmdline_or_bootconfig)
+		return false;
 
 	do {
 		seq = read_seqbegin(&susfs_fake_cmdline_or_bootconfig_seqlock);
 		seq_puts(m, fake_cmdline_or_bootconfig);
 	} while (read_seqretry(&susfs_fake_cmdline_or_bootconfig_seqlock, seq));
+	return true;
 }
 #endif
 
@@ -826,7 +1068,7 @@ static DEFINE_MUTEX(susfs_mutex_lock_open_redirect);
 static DEFINE_HASHTABLE(OPEN_REDIRECT_HLIST, 10);
 DEFINE_STATIC_SRCU(susfs_srcu_open_redirect);
 
-void susfs_add_open_redirect(void __user **user_info) {
+void susfs_add_open_redirect(void __user **user_info, bool with_uid) {
 	struct st_susfs_open_redirect info = {0};
 	struct st_susfs_open_redirect_hlist *new_entry_target, *new_entry_redirected, *tmp_entry_target, *tmp_entry_redirected;
 	struct hlist_node *tmp_hlist_node;
@@ -835,7 +1077,8 @@ void susfs_add_open_redirect(void __user **user_info) {
 	bool is_first_dup_found = false;
 	bool is_second_dup_found = false;
 
-	if (copy_from_user(&info, (struct st_susfs_open_redirect __user*)*user_info, sizeof(info))) {
+	if (copy_from_user(&info, (struct st_susfs_open_redirect __user*)*user_info,
+			with_uid ? sizeof(info) : offsetof(struct st_susfs_open_redirect, target_uid))) {
 		info.err = -EFAULT;
 		goto out_copy_to_user;
 	}
@@ -931,6 +1174,14 @@ void susfs_add_open_redirect(void __user **user_info) {
 				kfree(new_entry_target);
 				goto out_path_put_target_path;
 			}
+			/* Per-(target_ino, target_uid): only a redirect with the SAME target_uid is a
+			 * true duplicate to replace. Different target_uids — per-app overlays of the same
+			 * file, e.g. mist_susfs's per-uid /dev/__properties__ prop overlay — must coexist
+			 * as separate entries on this target inode; the openat spoof above already selects
+			 * the entry whose target_uid matches current_uid(). Legacy (non-UID) redirects use
+			 * target_uid==0, so their replace-on-dup behaviour is unchanged. */
+			if (tmp_entry_target->info.target_uid != info.target_uid)
+				continue;
 			is_first_dup_found = true;
 			hash_del_rcu(&tmp_entry_target->node);
 			break;
@@ -993,7 +1244,9 @@ struct filename *susfs_open_redirect_spoof_do_sys_openat(struct inode *inode) {
 
 	hash_for_each_possible_rcu(OPEN_REDIRECT_HLIST, entry, node, inode->i_ino) {
 		if (!entry->reversed_lookup_only &&
-			entry->target_dev == inode->i_sb->s_dev)
+			entry->target_dev == inode->i_sb->s_dev &&
+			(entry->info.target_uid <= 0 ||
+			 entry->info.target_uid == current_uid().val))
 		{
 			switch(entry->info.uid_scheme) {
 				case UID_NON_APP_PROC:
@@ -1155,12 +1408,60 @@ int susfs_open_redirect_spoof_show_map_vma(struct inode *inode, unsigned long *o
 
 /* sus_map */
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
-void susfs_add_sus_map(void __user **user_info) {
+/* per-uid companion table for sus_map, keyed by inode ino */
+static DEFINE_HASHTABLE(SUS_MAP_UID_HLIST, 8);
+static DEFINE_SPINLOCK(susfs_sus_map_uid_lock);
+
+static void susfs_sus_map_uid_add(unsigned long ino, unsigned long dev, int target_uid) {
+	struct st_susfs_ino_uid_hlist *new_entry, *tmp_entry;
+	struct hlist_node *tmp_node;
+
+	new_entry = kzalloc(sizeof(*new_entry), GFP_KERNEL);
+	if (!new_entry)
+		return;
+	new_entry->target_ino = ino;
+	new_entry->target_dev = dev;
+	new_entry->target_uid = target_uid;
+
+	spin_lock(&susfs_sus_map_uid_lock);
+	hash_for_each_possible_safe(SUS_MAP_UID_HLIST, tmp_entry, tmp_node, node, ino) {
+		if (tmp_entry->target_ino == ino && tmp_entry->target_dev == dev &&
+			tmp_entry->target_uid == target_uid) {
+			hash_del(&tmp_entry->node);
+			kfree(tmp_entry);
+		}
+	}
+	hash_add(SUS_MAP_UID_HLIST, &new_entry->node, ino);
+	spin_unlock(&susfs_sus_map_uid_lock);
+}
+
+/* non-static: referenced by the SUSFS_IS_INODE_SUS_MAP macro (task_mmu.c etc.).
+ * true if a per-uid rule exists for this inode and current uid is not a target. */
+bool susfs_sus_map_uid_excluded(struct inode *inode) {
+	struct st_susfs_ino_uid_hlist *e;
+	unsigned long ino = inode->i_ino;
+	unsigned long dev = inode->i_sb->s_dev;
+	uid_t cur = current_uid().val;
+	bool has_rule = false, uid_match = false;
+
+	spin_lock(&susfs_sus_map_uid_lock);
+	hash_for_each_possible(SUS_MAP_UID_HLIST, e, node, ino) {
+		if (e->target_ino == ino && e->target_dev == dev) {
+			has_rule = true;
+			if (e->target_uid == cur) { uid_match = true; break; }
+		}
+	}
+	spin_unlock(&susfs_sus_map_uid_lock);
+	return has_rule && !uid_match;
+}
+
+void susfs_add_sus_map(void __user **user_info, bool with_uid) {
 	struct st_susfs_sus_map info = {0};
 	struct path path;
 	struct inode *inode = NULL;
 
-	if (copy_from_user(&info, (struct st_susfs_sus_map __user*)*user_info, sizeof(info))) {
+	if (copy_from_user(&info, (struct st_susfs_sus_map __user*)*user_info,
+			with_uid ? sizeof(info) : offsetof(struct st_susfs_sus_map, target_uid))) {
 		info.err = -EFAULT;
 		goto out_copy_to_user;
 	}
@@ -1178,6 +1479,8 @@ void susfs_add_sus_map(void __user **user_info) {
 		goto out_path_put_path;
 	}
 	set_bit(AS_FLAGS_SUS_MAP, &inode->i_mapping->flags);
+	if (with_uid && info.target_uid > 0)
+		susfs_sus_map_uid_add(inode->i_ino, inode->i_sb->s_dev, info.target_uid);
 	SUSFS_LOGI("pathname: '%s', is flagged as AS_FLAGS_SUS_MAP\n", info.target_pathname);
 	info.err = 0;
 out_path_put_path:

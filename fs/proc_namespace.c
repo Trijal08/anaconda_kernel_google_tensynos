@@ -24,6 +24,7 @@
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 extern struct static_key_false susfs_is_hide_sus_mnts_for_non_su_procs_enabled;
 extern bool susfs_is_current_ksu_domain(void);
+extern bool susfs_sus_mount_hidden_for_current(void);
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 
 static __poll_t mounts_poll(struct file *file, poll_table *wait)
@@ -470,7 +471,7 @@ static int mounts_open(struct inode *inode, struct file *file)
 {
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 	if (static_branch_unlikely(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled)) {
-		if (likely(!susfs_is_current_ksu_domain()))
+		if (likely(!susfs_is_current_ksu_domain()) && susfs_sus_mount_hidden_for_current())
 			return mounts_open_common(inode, file, susfs_show_vfsmnt);
 	}
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
@@ -481,7 +482,7 @@ static int mountinfo_open(struct inode *inode, struct file *file)
 {
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 	if (static_branch_unlikely(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled)) {
-		if (likely(!susfs_is_current_ksu_domain()))
+		if (likely(!susfs_is_current_ksu_domain()) && susfs_sus_mount_hidden_for_current())
 			return mounts_open_common(inode, file, susfs_show_mountinfo);
 	}
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
@@ -492,7 +493,7 @@ static int mountstats_open(struct inode *inode, struct file *file)
 {
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 	if (static_branch_unlikely(&susfs_is_hide_sus_mnts_for_non_su_procs_enabled)) {
-		if (likely(!susfs_is_current_ksu_domain()))
+		if (likely(!susfs_is_current_ksu_domain()) && susfs_sus_mount_hidden_for_current())
 			return mounts_open_common(inode, file, susfs_show_vfsstat);
 	}
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
