@@ -14,7 +14,7 @@ static char *saved_boot_config;
 
 #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
 extern struct static_key_false susfs_is_fake_cmdline_or_bootconfig_buffer_set;
-extern void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);
+extern bool susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);
 #endif
 
 static int boot_config_proc_show(struct seq_file *m, void *v)
@@ -22,8 +22,10 @@ static int boot_config_proc_show(struct seq_file *m, void *v)
 #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
 	if (static_branch_likely(&susfs_is_fake_cmdline_or_bootconfig_buffer_set)) {
 		if (saved_boot_config) {
-			susfs_spoof_cmdline_or_bootconfig(m);
-			return 0;
+			/* per-uid/global override applied -> done; otherwise fall
+			 * through and emit the real bootconfig for this process */
+			if (susfs_spoof_cmdline_or_bootconfig(m))
+				return 0;
 		}
 	}
 #endif
