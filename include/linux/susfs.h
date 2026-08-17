@@ -82,6 +82,8 @@ struct st_susfs_uid_hlist {
 };
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 
+struct kstat;
+
 /* sus_kstat */
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 #define KSTAT_SPOOF_INO (1 << 0)
@@ -130,6 +132,35 @@ struct st_susfs_sus_kstat_hlist {
 	int                                     spoofed_mnt_id;
 	bool                                    is_fuse;
 	struct st_susfs_sus_kstat               info;
+};
+
+/* per-uid file-time offset: shift atime/mtime/ctime of every file the app OWNS
+ * (inode owner uid == caller uid) by a fixed signed per-uid delta, so its whole
+ * visible internal storage looks created at a different time — and unlike the
+ * per-inode kstat spoof, it also covers files the app creates after boot. */
+struct st_susfs_file_time_offset {
+	int                                     target_uid;
+	long                                    offset_sec;   /* signed: +future / -past */
+	int                                     err;
+};
+struct st_susfs_file_time_offset_hlist {
+	int                                     target_uid;
+	long                                    offset_sec;
+	struct hlist_node                       node;
+};
+
+/* per-uid /proc/uptime offset: shift the uptime a target app sees by a signed
+ * per-uid delta (seconds), applied when /proc/uptime is generated. Kernel-side,
+ * so it also catches raw openat()+read() (unlike the bionic uptime offset). */
+struct st_susfs_uptime_offset {
+	int                                     target_uid;
+	long                                    offset_sec;
+	int                                     err;
+};
+struct st_susfs_uptime_offset_hlist {
+	int                                     target_uid;
+	long                                    offset_sec;
+	struct hlist_node                       node;
 };
 #endif
 
@@ -279,6 +310,10 @@ bool susfs_sus_mount_hidden_for_current(void);
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 void susfs_add_sus_kstat(void __user **user_info, bool with_uid);
 void susfs_update_sus_kstat(void __user **user_info);
+void susfs_set_file_time_offset(void __user **user_info);
+void susfs_set_uptime_offset(void __user **user_info);
+long susfs_uptime_offset_for_current(void);
+void susfs_sus_kstat_apply_file_time_offset(struct kstat *stat);
 #endif
 
 /* try_umount */
