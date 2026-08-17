@@ -10,6 +10,7 @@
 #include <linux/mutex.h>
 #include <linux/seqlock.h>
 #include <linux/stat.h>
+#include <linux/timekeeping.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/fdtable.h>
@@ -603,6 +604,153 @@ out_copy_to_user:
 	SUSFS_LOGI("CMD_SUSFS_UPDATE_SUS_KSTAT -> ret: %d\n", info.err);
 }
 
+/* --- per-uid file-time offset (shift owned files' timestamps) --- */
+static DEFINE_HASHTABLE(FILE_TIME_OFFSET_HLIST, 5);
+static DEFINE_SPINLOCK(susfs_file_time_offset_lock);
+DEFINE_STATIC_KEY_FALSE(susfs_file_time_offset_active);
+
+void susfs_set_file_time_offset(void __user **user_info) {
+	struct st_susfs_file_time_offset info = {0};
+	struct st_susfs_file_time_offset_hlist *new_entry, *tmp_entry;
+	struct hlist_node *tmp_node;
+
+	if (copy_from_user(&info, (struct st_susfs_file_time_offset __user*)*user_info, sizeof(info))) {
+		info.err = -EFAULT;
+		goto out;
+	}
+	if (info.target_uid <= 0) { info.err = -EINVAL; goto out; }
+
+	/* offset 0 removes any existing entry for the uid */
+	if (info.offset_sec == 0) {
+		spin_lock(&susfs_file_time_offset_lock);
+		hash_for_each_possible_safe(FILE_TIME_OFFSET_HLIST, tmp_entry, tmp_node, node, info.target_uid) {
+			if (tmp_entry->target_uid == info.target_uid) {
+				hash_del(&tmp_entry->node); kfree(tmp_entry);
+			}
+		}
+		spin_unlock(&susfs_file_time_offset_lock);
+		info.err = 0;
+		goto out;
+	}
+
+	new_entry = kzalloc(sizeof(*new_entry), GFP_KERNEL);
+	if (!new_entry) { info.err = -ENOMEM; goto out; }
+	new_entry->target_uid = info.target_uid;
+	new_entry->offset_sec = info.offset_sec;
+
+	spin_lock(&susfs_file_time_offset_lock);
+	hash_for_each_possible_safe(FILE_TIME_OFFSET_HLIST, tmp_entry, tmp_node, node, info.target_uid) {
+		if (tmp_entry->target_uid == info.target_uid) {
+			hash_del(&tmp_entry->node); kfree(tmp_entry);
+		}
+	}
+	hash_add(FILE_TIME_OFFSET_HLIST, &new_entry->node, info.target_uid);
+	spin_unlock(&susfs_file_time_offset_lock);
+	if (!static_key_enabled(&susfs_file_time_offset_active))
+		static_branch_enable(&susfs_file_time_offset_active);
+	SUSFS_LOGI("set file-time offset %ld for uid %d\n", info.offset_sec, info.target_uid);
+	info.err = 0;
+out:
+	if (copy_to_user(&((struct st_susfs_file_time_offset __user*)*user_info)->err, &info.err, sizeof(info.err)))
+		info.err = -EFAULT;
+}
+
+/* Signed file-time offset for the current target app, else 0. Applies to ANY file the
+ * app stats (not just files it owns) — the caller adds an age guard so only files that
+ * predate this boot are back-dated. This is what reaches the system-owned device-age
+ * anchors FPJS reads (e.g. /data/system/users/userlist.xml = the factory-reset time),
+ * which the old owner-only check skipped. */
+static long susfs_file_time_offset_for_current(void) {
+	struct st_susfs_file_time_offset_hlist *e;
+	uid_t cur;
+	long off = 0;
+
+	if (!static_branch_unlikely(&susfs_file_time_offset_active))
+		return 0;
+	/* No umounted-app gate: our engine never try_umounts targets, so gating on it
+	 * silently no-ops the shift. The per-uid table is the sole authority (only
+	 * configured apps have an entry). Cheap uid check skips system/root stats fast. */
+	cur = current_uid().val;
+	if (cur < 10000)
+		return 0;
+	spin_lock(&susfs_file_time_offset_lock);
+	hash_for_each_possible(FILE_TIME_OFFSET_HLIST, e, node, cur) {
+		if (e->target_uid == cur) { off = e->offset_sec; break; }
+	}
+	spin_unlock(&susfs_file_time_offset_lock);
+	return off;
+}
+
+/* --- per-uid /proc/uptime offset (shift the uptime a target app sees) --- */
+static DEFINE_HASHTABLE(UPTIME_OFFSET_HLIST, 5);
+static DEFINE_SPINLOCK(susfs_uptime_offset_lock);
+DEFINE_STATIC_KEY_FALSE(susfs_uptime_offset_active);
+
+void susfs_set_uptime_offset(void __user **user_info) {
+	struct st_susfs_uptime_offset info = {0};
+	struct st_susfs_uptime_offset_hlist *new_entry, *tmp_entry;
+	struct hlist_node *tmp_node;
+
+	if (copy_from_user(&info, (struct st_susfs_uptime_offset __user*)*user_info, sizeof(info))) {
+		info.err = -EFAULT;
+		goto out;
+	}
+	if (info.target_uid <= 0) { info.err = -EINVAL; goto out; }
+
+	/* offset 0 removes any existing entry for the uid */
+	if (info.offset_sec == 0) {
+		spin_lock(&susfs_uptime_offset_lock);
+		hash_for_each_possible_safe(UPTIME_OFFSET_HLIST, tmp_entry, tmp_node, node, info.target_uid) {
+			if (tmp_entry->target_uid == info.target_uid) {
+				hash_del(&tmp_entry->node); kfree(tmp_entry);
+			}
+		}
+		spin_unlock(&susfs_uptime_offset_lock);
+		info.err = 0;
+		goto out;
+	}
+
+	new_entry = kzalloc(sizeof(*new_entry), GFP_KERNEL);
+	if (!new_entry) { info.err = -ENOMEM; goto out; }
+	new_entry->target_uid = info.target_uid;
+	new_entry->offset_sec = info.offset_sec;
+
+	spin_lock(&susfs_uptime_offset_lock);
+	hash_for_each_possible_safe(UPTIME_OFFSET_HLIST, tmp_entry, tmp_node, node, info.target_uid) {
+		if (tmp_entry->target_uid == info.target_uid) {
+			hash_del(&tmp_entry->node); kfree(tmp_entry);
+		}
+	}
+	hash_add(UPTIME_OFFSET_HLIST, &new_entry->node, info.target_uid);
+	spin_unlock(&susfs_uptime_offset_lock);
+	if (!static_key_enabled(&susfs_uptime_offset_active))
+		static_branch_enable(&susfs_uptime_offset_active);
+	SUSFS_LOGI("set uptime offset %ld for uid %d\n", info.offset_sec, info.target_uid);
+	info.err = 0;
+out:
+	if (copy_to_user(&((struct st_susfs_uptime_offset __user*)*user_info)->err, &info.err, sizeof(info.err)))
+		info.err = -EFAULT;
+}
+
+/* Signed /proc/uptime offset (seconds) for the current uid, else 0. The per-uid
+ * table only holds target apps (ksud-registered), so the lookup alone is the
+ * authority — no umounted-app gate, so it applies reliably to every read. */
+long susfs_uptime_offset_for_current(void) {
+	struct st_susfs_uptime_offset_hlist *e;
+	uid_t cur;
+	long off = 0;
+
+	if (!static_branch_unlikely(&susfs_uptime_offset_active))
+		return 0;
+	cur = current_uid().val;
+	spin_lock(&susfs_uptime_offset_lock);
+	hash_for_each_possible(UPTIME_OFFSET_HLIST, e, node, cur) {
+		if (e->target_uid == cur) { off = e->offset_sec; break; }
+	}
+	spin_unlock(&susfs_uptime_offset_lock);
+	return off;
+}
+
 void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat)
 {
 	struct st_susfs_sus_kstat_hlist *entry = NULL;
@@ -610,6 +758,26 @@ void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *s
 	unsigned long target_ino = 0;
 	dev_t target_dev = 0;
 	bool is_fuse = false;
+
+	/* per-uid file-time offset: back-date EVERY file the target app stats that predates
+	 * this boot — install-time, system, and the device-age anchors FPJS reads via stat()
+	 * (/data, /data/system, /data/system/users/userlist.xml = the factory-reset time).
+	 * Files created this session (mtime >= boot) are left real, so a just-written file
+	 * doesn't look impossibly old against the (unspoofed) wall clock. The boot wall time
+	 * is the REAL one: the per-app uptime spoof only rewrites read paths, never the
+	 * kernel's timekeeping. */
+	{
+		long __off = susfs_file_time_offset_for_current();
+		if (__off) {
+			struct timespec64 __boot;
+			getboottime64(&__boot);
+			if (stat->mtime.tv_sec < __boot.tv_sec) {
+				stat->atime.tv_sec += __off;
+				stat->mtime.tv_sec += __off;
+				stat->ctime.tv_sec += __off;
+			}
+		}
+	}
 
 	if (inode->i_sb->s_magic == FUSE_SUPER_MAGIC) {
 		fi = get_fuse_inode(inode);
