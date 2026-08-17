@@ -9,6 +9,10 @@
 #include <linux/kernel_stat.h>
 #include "internal.h"
 
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern long susfs_uptime_offset_for_current(void);
+#endif
+
 static int uptime_proc_show(struct seq_file *m, void *v)
 {
 	struct timespec64 uptime;
@@ -27,6 +31,21 @@ static int uptime_proc_show(struct seq_file *m, void *v)
 
 	ktime_get_boottime_ts64(&uptime);
 	timens_add_boottime(&uptime);
+
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	/* per-uid /proc/uptime spoof: shift the uptime a target app sees. Kernel-side,
+	 * so it catches libc fopen, raw openat()+read() and `cat` alike. */
+	{
+		long __uoff = susfs_uptime_offset_for_current();
+		if (__uoff) {
+			uptime.tv_sec += __uoff;
+			if (uptime.tv_sec < 0) {
+				uptime.tv_sec = 0;
+				uptime.tv_nsec = 0;
+			}
+		}
+	}
+#endif
 
 	idle.tv_sec = div_u64_rem(idle_nsec, NSEC_PER_SEC, &rem);
 	idle.tv_nsec = rem;

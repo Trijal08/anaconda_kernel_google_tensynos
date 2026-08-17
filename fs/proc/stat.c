@@ -121,6 +121,17 @@ static int show_stat(struct seq_file *p, void *v)
 	getboottime64(&boottime);
 	/* shift boot timestamp according to the timens offset */
 	timens_sub_boottime(&boottime);
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	/* per-uid /proc/stat btime spoof: make boot appear earlier so the target app
+	 * can't derive real uptime from (wall_now - btime). Matches the /proc/uptime
+	 * offset (uptime += off  =>  boot earlier by off). */
+	{
+		extern long susfs_uptime_offset_for_current(void);
+		long __uoff = susfs_uptime_offset_for_current();
+		if (__uoff)
+			boottime.tv_sec -= __uoff;
+	}
+#endif
 
 	for_each_possible_cpu(i) {
 		struct kernel_cpustat kcpustat;
