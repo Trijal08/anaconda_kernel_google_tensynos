@@ -575,6 +575,21 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 	/* apply timens offset for boottime and convert nsec -> ticks */
 	start_time =
 		nsec_to_clock_t(timens_add_boottime_ns(task->start_boottime));
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	/* per-uid /proc/<pid>/stat starttime spoof: gated on the READER's uid, so a
+	 * target app reading its own (field 22) sees a start shifted by the same offset
+	 * as /proc/uptime — otherwise starttime leaks the real uptime at launch. */
+	{
+		extern long susfs_uptime_offset_for_current(void);
+		long __uoff = susfs_uptime_offset_for_current();
+		if (__uoff > 0) {
+			start_time += nsec_to_clock_t((u64)__uoff * NSEC_PER_SEC);
+		} else if (__uoff < 0) {
+			u64 __d = nsec_to_clock_t((u64)(-__uoff) * NSEC_PER_SEC);
+			start_time = (__d > start_time) ? 0 : (start_time - __d);
+		}
+	}
+#endif
 
 	seq_put_decimal_ull(m, "", pid_nr_ns(pid, ns));
 	seq_puts(m, " (");
