@@ -1402,6 +1402,7 @@ static int dwc3_exynos_remove(struct platform_device *pdev)
 static void dwc3_exynos_shutdown(struct platform_device *pdev)
 {
 	struct dwc3_exynos *exynos = platform_get_drvdata(pdev);
+	struct dwc3 *dwc = exynos->dwc;
 
 	/*
 	 * According to extcon state, turn off USB gadget or USB host
@@ -1416,9 +1417,28 @@ static void dwc3_exynos_shutdown(struct platform_device *pdev)
 	extcon_unregister_notifier(exynos->edev, EXTCON_USB, &exynos->device_nb);
 	extcon_unregister_notifier(exynos->edev, EXTCON_USB_HOST, &exynos->host_nb);
 
-	dwc3_exynos_remove(pdev);
+	/*
+	 * Quiesce the controller, but do not tear down the device model.
+	 * shutdown() is not remove(): unregistering the dwc3 child from here
+	 * runs dwc3_gadget_exit() -> usb_del_gadget() + usb_put_gadget(), and
+	 * the gadget core's usb_gadget_release() dereferences gadget->udc,
+	 * which usb_del_gadget() has just cleared.  The SoC is about to reset,
+	 * so stopping the OTG state machine and the clocks is all that is
+	 * actually needed here.
+	 */
+	mutex_lock(&exynos->dotg_lock);
+	dwc3_exynos_otg_exit(dwc, exynos);
+	mutex_unlock(&exynos->dotg_lock);
 
-	return;
+	pm_runtime_get_sync(&pdev->dev);
+	dwc3_ulpi_exit(dwc);
+	pm_runtime_put_sync(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
+
+	if (!pm_runtime_status_suspended(&pdev->dev)) {
+		dwc3_exynos_clk_disable_unprepare(exynos);
+		pm_runtime_set_suspended(&pdev->dev);
+	}
 }
 
 #ifdef CONFIG_PM
