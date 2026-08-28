@@ -17,6 +17,8 @@
 #define TMU_TYPE_GPU	1
 #define TMU_TYPE_ISP	2
 #define TMU_TYPE_TPU	3
-#define TMU_TYPE_END	4
+/* AUR exists on gs201/zuma only; see enum tmu_type_t in gs_tmu_v3.c */
+#define TMU_TYPE_AUR	4
+#define TMU_TYPE_END	5
 
 #endif /* _DT_BINDINGS_GS_101_TMU_H */
