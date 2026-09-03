@@ -27,6 +27,7 @@
 		reg = <0x0 0x100A0000 0x800>;
 		interrupts = <GIC_SPI IRQ_TMU_TOP_INTREQ_MISC IRQ_TYPE_LEVEL_HIGH 0>;
 		tmu_name = "BIG";
+		tmu_type = <TMU_TYPE_CPU>;
 		id = <0>;
 		ect_nouse;
 		#thermal-sensor-cells = <0>;
@@ -70,6 +71,7 @@
 		reg = <0x0 0x100A0000 0x800>;
 		interrupts = <GIC_SPI IRQ_TMU_TOP_INTREQ_MISC IRQ_TYPE_LEVEL_HIGH 0>;
 		tmu_name = "MID";
+		tmu_type = <TMU_TYPE_CPU>;
 		id = <1>;
 		ect_nouse;
 		#thermal-sensor-cells = <0>;
@@ -107,6 +109,7 @@
 		reg = <0x0 0x100A0000 0x800>;
 		interrupts = <GIC_SPI IRQ_TMU_TOP_INTREQ_MISC IRQ_TYPE_LEVEL_HIGH 0>;
 		tmu_name = "LITTLE";
+		tmu_type = <TMU_TYPE_CPU>;
 		id = <2>;
 		ect_nouse;
 		#thermal-sensor-cells = <0>;
@@ -143,6 +146,7 @@
 		reg = <0x0 0x100B0000 0x800>;
 		interrupts = <GIC_SPI IRQ_TMU_SUB_INTREQ_MISC IRQ_TYPE_LEVEL_HIGH 0>;
 		tmu_name = "G3D";
+		tmu_type = <TMU_TYPE_GPU>;
 		id = <3>;
 		ect_nouse;
 		#thermal-sensor-cells = <0>;
@@ -171,6 +175,7 @@
 		reg = <0x0 0x100B0000 0x800>;
 		interrupts = <GIC_SPI IRQ_TMU_SUB_INTREQ_MISC IRQ_TYPE_LEVEL_HIGH 0>;
 		tmu_name = "ISP";
+		tmu_type = <TMU_TYPE_ISP>;
 		id = <4>;
 		ect_nouse;
 		#thermal-sensor-cells = <0>;
@@ -185,6 +190,7 @@
 		reg = <0x0 0x100B0000 0x800>;
 		interrupts = <GIC_SPI IRQ_TMU_SUB_INTREQ_MISC IRQ_TYPE_LEVEL_HIGH 0>;
 		tmu_name = "TPU";
+		tmu_type = <TMU_TYPE_TPU>;
 		id = <5>;
 		ect_nouse;
 		#thermal-sensor-cells = <0>;
@@ -213,6 +219,7 @@
 		reg = <0x0 0x100B0000 0x800>;
 		interrupts = <GIC_SPI IRQ_TMU_SUB_INTREQ_MISC IRQ_TYPE_LEVEL_HIGH 0>;
 		tmu_name = "AUR";
+		tmu_type = <TMU_TYPE_AUR>;
 		id = <6>;
 		ect_nouse;
 		#thermal-sensor-cells = <0>;
