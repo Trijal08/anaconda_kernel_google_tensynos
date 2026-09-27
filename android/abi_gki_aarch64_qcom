@@ -3,7 +3,6 @@
   activate_task
   add_cpu
   add_device_randomness
-  add_memory
   addrconf_add_linklocal
   addrconf_prefix_rcv_add_addr
   add_taint
@@ -31,7 +30,6 @@
   __alloc_percpu_gfp
   __alloc_skb
   alloc_skb_with_frags
-  alloc_swapdev_block
   alloc_workqueue
   alt_cb_patch_nops
   amba_bustype
@@ -45,7 +43,6 @@
   __arch_copy_from_user
   __arch_copy_to_user
   arch_freq_scale
-  arch_invalidate_pmem
   arch_timer_read_counter
   argv_free
   argv_split
@@ -1953,7 +1950,6 @@
   mem_dump_obj
   memdup_user
   memmove
-  memory_block_size_bytes
   memory_read_from_buffer
   memparse
   mempool_alloc
@@ -1963,7 +1959,6 @@
   mempool_free
   mempool_free_slab
   memremap
-  memremap_pages
   memscan
   mem_section
   memset
@@ -1971,7 +1966,6 @@
   __memset_io
   memstart_addr
   memunmap
-  memunmap_pages
   migrate_pages
   migrate_swap
   __migrate_task
@@ -2216,7 +2210,6 @@
   of_find_node_opts_by_path
   of_find_node_with_property
   of_find_property
-  offline_and_remove_memory
   of_fwnode_ops
   of_genpd_add_provider_onecell
   of_genpd_add_provider_simple
@@ -2780,7 +2773,6 @@
   register_inetaddr_notifier
   register_kprobe
   register_kretprobe
-  register_memory_notifier
   register_module_notifier
   register_netdev
   register_netdevice
@@ -2850,7 +2842,6 @@
   release_sock
   remap_pfn_range
   remove_cpu
-  remove_memory
   remove_proc_entry
   remove_resource
   remove_wait_queue
@@ -3155,7 +3146,6 @@
   smp_call_function
   smp_call_function_single
   smp_call_function_single_async
-  snapshot_get_image_size
   snd_ctl_add
   snd_ctl_new1
   snd_ctl_remove
@@ -3431,10 +3421,6 @@
   time64_to_tm
   timer_unstable_counter_workaround
   timespec64_to_jiffies
-  tipc_dump_done
-  tipc_dump_start
-  tipc_nl_sk_walk
-  tipc_sk_fill_sock_diag
   topology_clear_scale_freq_source
   topology_update_done
   topology_update_thermal_pressure
@@ -3832,7 +3818,6 @@
   uart_remove_one_port
   uart_resume_port
   uart_suspend_port
-  uart_try_toggle_sysrq
   uart_unregister_driver
   uart_update_timeout
   uart_write_wakeup

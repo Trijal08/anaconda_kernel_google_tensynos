@@ -349,6 +349,8 @@ struct tcpm_port {
 	bool pd_supported;
 	enum typec_port_type port_type;
 
+	bool ignore_alt_modes;
+
 	/*
 	 * Set to true when vbus is greater than VSAFE5V min.
 	 * Set to false when vbus falls below vSinkDisconnect max threshold.
@@ -1875,7 +1877,11 @@ static void tcpm_handle_vdm_request(struct tcpm_port *port,
 		port->vdm_state = VDM_STATE_DONE;
 	}
 
-	if (PD_VDO_SVDM(p[0]) && (adev || tcpm_vdm_ams(port) || port->nr_snk_vdo)) {
+	if (port->ignore_alt_modes) {
+		tcpm_log(port, "tcpm_handle_vdm_request: ignore_alt_modes is set");
+	}
+
+	if (PD_VDO_SVDM(p[0]) && (adev || tcpm_vdm_ams(port) || port->nr_snk_vdo) && !port->ignore_alt_modes) {
 		/*
 		 * Here a SVDM is received (INIT or RSP or unknown). Set the vdm_sm_running in
 		 * advance because we are dropping the lock but may send VDMs soon.
@@ -6661,6 +6667,58 @@ static void tcpm_fw_get_pd_revision(struct tcpm_port *port, struct fwnode_handle
 	port->pd_rev.ver_major = val[2];
 	port->pd_rev.ver_minor = val[3];
 }
+
+static int tcpm_copy_pdos(u32 *dest_pdo, const u32 *src_pdo, unsigned int nr_pdo)
+{
+	unsigned int i;
+
+	if (nr_pdo > PDO_MAX_OBJECTS)
+		nr_pdo = PDO_MAX_OBJECTS;
+
+	for (i = 0; i < nr_pdo; i++)
+		dest_pdo[i] = src_pdo[i];
+
+	return nr_pdo;
+}
+
+#define DO_NOT_IGNORE_ALT_MODES (UINT_MAX - 1)
+#define IGNORE_ALT_MODES (UINT_MAX)
+
+int tcpm_update_sink_capabilities(struct tcpm_port *port, const u32 *pdo, unsigned int nr_pdo,
+				  unsigned int operating_snk_mw)
+{
+	// reuse tcpm_update_sink_capabilities to avoid changing ABI
+	if (nr_pdo == DO_NOT_IGNORE_ALT_MODES || nr_pdo == IGNORE_ALT_MODES) {
+		port->ignore_alt_modes = nr_pdo == IGNORE_ALT_MODES;
+		return 0;
+	}
+
+	if (tcpm_validate_caps(port, pdo, nr_pdo))
+		return -EINVAL;
+
+	mutex_lock(&port->lock);
+	port->nr_snk_pdo = tcpm_copy_pdos(port->snk_pdo, pdo, nr_pdo);
+	port->operating_snk_mw = operating_snk_mw;
+	port->update_sink_caps = true;
+
+	switch (port->state) {
+	case SNK_NEGOTIATE_CAPABILITIES:
+	case SNK_NEGOTIATE_PPS_CAPABILITIES:
+	case SNK_READY:
+	case SNK_TRANSITION_SINK:
+	case SNK_TRANSITION_SINK_VBUS:
+		if (port->pps_data.active)
+			tcpm_set_state(port, SNK_NEGOTIATE_PPS_CAPABILITIES, 0);
+		else
+			tcpm_set_state(port, SNK_NEGOTIATE_CAPABILITIES, 0);
+		break;
+	default:
+		break;
+	}
+	mutex_unlock(&port->lock);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(tcpm_update_sink_capabilities);
 
 /* Power Supply access to expose source power information */
 enum tcpm_psy_online_states {

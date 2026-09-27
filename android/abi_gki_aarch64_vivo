@@ -792,7 +792,6 @@
   activate_task
   add_cpu
   add_device_randomness
-  add_memory
   add_taint
   add_timer
   add_timer_on
@@ -2965,7 +2964,6 @@
   memdup_user
   memdup_user_nul
   memmove
-  memory_block_size_bytes
   memory_cgrp_subsys
   memory_cgrp_subsys_enabled_key
   memory_read_from_buffer
@@ -2980,13 +2978,11 @@
   mempool_free_slab
   mempool_resize
   memremap
-  memremap_pages
   memscan
   memset
   memset64
   memstart_addr
   memunmap
-  memunmap_pages
   mfd_add_devices
   mfd_remove_devices
   migrate_pages
@@ -3289,7 +3285,6 @@
   of_thermal_is_trip_valid
   of_translate_address
   of_usb_host_tpl_support
-  offline_and_remove_memory
   on_each_cpu_cond_mask
   oops_in_progress
   open_candev
@@ -3736,7 +3731,6 @@
   register_kernel_break_hook
   register_kprobe
   register_kretprobe
-  register_memory_notifier
   register_module_notifier
   register_net_sysctl
   register_netdev
@@ -3826,7 +3820,6 @@
   remap_pfn_range
   remap_vmalloc_range
   remove_cpu
-  remove_memory
   remove_proc_entry
   remove_proc_subtree
   remove_resource
@@ -4538,10 +4531,6 @@
   timer_reduce
   timer_unstable_counter_workaround
   timespec64_to_jiffies
-  tipc_dump_done
-  tipc_dump_start
-  tipc_nl_sk_walk
-  tipc_sk_fill_sock_diag
   topology_clear_scale_freq_source
   topology_update_done
   topology_update_thermal_pressure
@@ -4636,7 +4625,6 @@
   uart_resume_port
   uart_set_options
   uart_suspend_port
-  uart_try_toggle_sysrq
   uart_unregister_driver
   uart_update_timeout
   uart_write_wakeup
@@ -4718,7 +4706,6 @@
   unregister_inetaddr_notifier
   unregister_kprobe
   unregister_kretprobe
-  unregister_memory_notifier
   unregister_net_sysctl_table
   unregister_netdev
   unregister_netdevice_many
