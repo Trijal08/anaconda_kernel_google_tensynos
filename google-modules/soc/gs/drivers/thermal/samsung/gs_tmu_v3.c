@@ -2260,7 +2260,7 @@ static int gs_map_dt_data(struct platform_device *pdev)
 		&data->control_temp_step);
 	if (ret < 0) {
 		data->control_temp_step = 0;
-		dev_err(&pdev->dev, "No input control_temp_step\n");
+		dev_dbg(&pdev->dev, "No input control_temp_step\n");
 	}
 
 	data->is_offset_enabled = false;
@@ -2382,7 +2382,9 @@ static int gs_map_dt_data(struct platform_device *pdev)
 	ret = of_property_read_u32(pdev->dev.of_node, "mpmm_enable", &data->mpmm_enable);
 	if (ret < 0) {
 		data->mpmm_enable = 0;
-		dev_err(&pdev->dev, "No input mpmm_enable\n");
+		/* MPMM is a CPU cluster feature, other zones have no such input */
+		if (!cpumask_empty(&data->mapped_cpus))
+			dev_err(&pdev->dev, "No input mpmm_enable\n");
 	}
 	/* determine MPMMEN_MASK and MPMMEN_OFFSET from mapped cpumask */
 	data->mpmm_enable_offset = cpumask_first(&data->mapped_cpus);
@@ -2392,14 +2394,16 @@ static int gs_map_dt_data(struct platform_device *pdev)
 	ret = of_property_read_u32(pdev->dev.of_node, "mpmm_throttle_level",
 								&data->mpmm_throttle_level);
 	if (ret < 0) {
-		dev_err(&pdev->dev, "No input mpmm_throttle_level\n");
+		if (!cpumask_empty(&data->mapped_cpus))
+			dev_err(&pdev->dev, "No input mpmm_throttle_level\n");
 		data->mpmm_throttle_level = 0;
 	}
 
 	ret = of_property_read_u32(pdev->dev.of_node, "mpmm_clr_throttle_level",
 								&data->mpmm_clr_throttle_level);
 	if (ret < 0) {
-		dev_err(&pdev->dev, "No input mpmm_clr_throttle_level\n");
+		if (!cpumask_empty(&data->mapped_cpus))
+			dev_err(&pdev->dev, "No input mpmm_clr_throttle_level\n");
 		data->mpmm_clr_throttle_level = 0;
 	}
 #else
