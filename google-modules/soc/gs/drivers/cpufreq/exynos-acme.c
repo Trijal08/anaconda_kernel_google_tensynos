@@ -320,9 +320,13 @@ static int exynos_cpufreq_get_power_table_ect_offset(struct cpumask *maskp, int 
 /*********************************************************************
  *                   EXYNOS CPUFREQ DRIVER INTERFACE                 *
  *********************************************************************/
+static int init_user_freq_qos(struct exynos_cpufreq_domain *domain,
+			      struct cpufreq_policy *policy);
+
 static int exynos_cpufreq_init(struct cpufreq_policy *policy)
 {
 	struct exynos_cpufreq_domain *domain = find_domain(policy->cpu);
+	int ret;
 
 	if (!domain)
 		return -EINVAL;
@@ -340,6 +344,20 @@ static int exynos_cpufreq_init(struct cpufreq_policy *policy)
 	rwlock_init(&domain->rate_info_lock);
 	tensor_aio_init_cpu_domain(domain);
 #endif
+
+	/*
+	 * The governor starts issuing frequency requests as soon as this
+	 * callback returns, so the user QoS requests must exist and the domain
+	 * must be enabled here. Doing it later, in probe post-initialization,
+	 * makes every early request fail with -EINVAL.
+	 */
+	ret = init_user_freq_qos(domain, policy);
+	if (ret < 0) {
+		pr_err("Failed to set max user qos vote!\n");
+		return ret;
+	}
+
+	enable_domain(domain);
 
 	pr_info("CPUFREQ domain%d registered\n", domain->id);
 
@@ -1602,14 +1620,6 @@ static int exynos_cpufreq_probe(struct platform_device *pdev)
 			pr_err("failed to find domain policy!\n");
 			return -ENODEV;
 		}
-
-		ret = init_user_freq_qos(domain, policy);
-		if (ret < 0) {
-			pr_err("Failed to set max user qos vote!\n");
-			return ret;
-		}
-
-		enable_domain(domain);
 
 #if IS_ENABLED(CONFIG_EXYNOS_CPU_THERMAL)
 		exynos_cpufreq_cooling_register(domain->dn, policy);
