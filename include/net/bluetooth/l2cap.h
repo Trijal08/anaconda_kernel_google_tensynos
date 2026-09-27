@@ -61,8 +61,6 @@
 #define L2CAP_WAIT_ACK_POLL_PERIOD	msecs_to_jiffies(200)
 #define L2CAP_WAIT_ACK_TIMEOUT		msecs_to_jiffies(10000)
 
-#define L2CAP_A2MP_DEFAULT_MTU		670
-
 /* L2CAP socket address */
 struct sockaddr_l2 {
 	sa_family_t	l2_family;
@@ -111,12 +109,6 @@ struct l2cap_conninfo {
 #define L2CAP_ECHO_RSP		0x09
 #define L2CAP_INFO_REQ		0x0a
 #define L2CAP_INFO_RSP		0x0b
-#define L2CAP_CREATE_CHAN_REQ	0x0c
-#define L2CAP_CREATE_CHAN_RSP	0x0d
-#define L2CAP_MOVE_CHAN_REQ	0x0e
-#define L2CAP_MOVE_CHAN_RSP	0x0f
-#define L2CAP_MOVE_CHAN_CFM	0x10
-#define L2CAP_MOVE_CHAN_CFM_RSP	0x11
 #define L2CAP_CONN_PARAM_UPDATE_REQ	0x12
 #define L2CAP_CONN_PARAM_UPDATE_RSP	0x13
 #define L2CAP_LE_CONN_REQ	0x14
@@ -146,7 +138,6 @@ struct l2cap_conninfo {
 /* L2CAP fixed channels */
 #define L2CAP_FC_SIG_BREDR	0x02
 #define L2CAP_FC_CONNLESS	0x04
-#define L2CAP_FC_A2MP		0x08
 #define L2CAP_FC_ATT		0x10
 #define L2CAP_FC_SIG_LE		0x20
 #define L2CAP_FC_SMP_LE		0x40
@@ -269,7 +260,6 @@ struct l2cap_conn_rsp {
 /* channel identifier */
 #define L2CAP_CID_SIGNALING	0x0001
 #define L2CAP_CID_CONN_LESS	0x0002
-#define L2CAP_CID_A2MP		0x0003
 #define L2CAP_CID_ATT		0x0004
 #define L2CAP_CID_LE_SIGNALING	0x0005
 #define L2CAP_CID_SMP		0x0006
@@ -284,7 +274,6 @@ struct l2cap_conn_rsp {
 #define L2CAP_CR_BAD_PSM	0x0002
 #define L2CAP_CR_SEC_BLOCK	0x0003
 #define L2CAP_CR_NO_MEM		0x0004
-#define L2CAP_CR_BAD_AMP	0x0005
 #define L2CAP_CR_INVALID_SCID	0x0006
 #define L2CAP_CR_SCID_IN_USE	0x0007
 
@@ -406,29 +395,6 @@ struct l2cap_info_rsp {
 	__u8        data[];
 } __packed;
 
-struct l2cap_create_chan_req {
-	__le16      psm;
-	__le16      scid;
-	__u8        amp_id;
-} __packed;
-
-struct l2cap_create_chan_rsp {
-	__le16      dcid;
-	__le16      scid;
-	__le16      result;
-	__le16      status;
-} __packed;
-
-struct l2cap_move_chan_req {
-	__le16      icid;
-	__u8        dest_amp_id;
-} __packed;
-
-struct l2cap_move_chan_rsp {
-	__le16      icid;
-	__le16      result;
-} __packed;
-
 #define L2CAP_MR_SUCCESS	0x0000
 #define L2CAP_MR_PEND		0x0001
 #define L2CAP_MR_BAD_ID		0x0002
@@ -543,8 +509,8 @@ struct l2cap_seq_list {
 
 struct l2cap_chan {
 	struct l2cap_conn	*conn;
-	struct hci_conn		*hs_hcon;
-	struct hci_chan		*hs_hchan;
+	struct hci_conn		*hs_hcon;	/* kABI placeholder (BT_HS removed) */
+	struct hci_chan		*hs_hchan;	/* kABI placeholder (BT_HS removed) */
 	struct kref	kref;
 	atomic_t	nesting;
 
@@ -595,6 +561,7 @@ struct l2cap_chan {
 	unsigned long	conn_state;
 	unsigned long	flags;
 
+	/* kABI placeholders: former BT_HS/AMP channel move state, unused */
 	__u8		remote_amp_id;
 	__u8		local_amp_id;
 	__u8		move_id;
@@ -657,7 +624,8 @@ struct l2cap_chan {
 struct l2cap_ops {
 	char			*name;
 
-	struct l2cap_chan	*(*new_connection) (struct l2cap_chan *chan);
+	int			(*new_connection)(struct l2cap_chan *chan,
+						  struct l2cap_chan *new_chan);
 	int			(*recv) (struct l2cap_chan * chan,
 					 struct sk_buff *skb);
 	void			(*teardown) (struct l2cap_chan *chan, int err);
@@ -699,7 +667,12 @@ struct l2cap_conn {
 	struct sk_buff		*rx_skb;
 	__u32			rx_len;
 	__u8			tx_ident;
-	struct mutex		ident_lock;
+	union {
+		/* kABI placeholder: replaced upstream by tx_ida */
+		struct mutex		ident_lock;
+		/* Bluetooth: L2CAP: Fix not tracking outstanding TX ident */
+		struct ida		tx_ida;
+	};
 
 	struct sk_buff_head	pending_rx;
 	struct work_struct	pending_rx_work;
@@ -739,6 +712,10 @@ struct l2cap_user {
 
 struct l2cap_pinfo {
 	struct bt_sock		bt;
+
+	/* With owning sk_socket chan may be read without lock, other access
+	 * should hold lock_sock.
+	 */
 	struct l2cap_chan	*chan;
 	struct sk_buff		*rx_busy_skb;
 };
@@ -786,6 +763,7 @@ enum {
 	FLAG_ECRED_CONN_REQ_SENT,
 	FLAG_PENDING_SECURITY,
 	FLAG_HOLD_HCI_CONN,
+	FLAG_DEL,
 };
 
 /* Lock nesting levels for L2CAP channels. We need these because lockdep
@@ -922,9 +900,10 @@ static inline __u16 __next_seq(struct l2cap_chan *chan, __u16 seq)
 	return (seq + 1) % (chan->tx_win_max + 1);
 }
 
-static inline struct l2cap_chan *l2cap_chan_no_new_connection(struct l2cap_chan *chan)
+static inline int l2cap_chan_no_new_connection(struct l2cap_chan *chan,
+					       struct l2cap_chan *new_chan)
 {
-	return NULL;
+	return -EOPNOTSUPP;
 }
 
 static inline int l2cap_chan_no_recv(struct l2cap_chan *chan, struct sk_buff *skb)
@@ -999,7 +978,7 @@ int l2cap_chan_reconfigure(struct l2cap_chan *chan, __u16 mtu);
 int l2cap_chan_send(struct l2cap_chan *chan, struct msghdr *msg, size_t len);
 void l2cap_chan_busy(struct l2cap_chan *chan, int busy);
 int l2cap_chan_check_security(struct l2cap_chan *chan, bool initiator);
-void l2cap_chan_set_defaults(struct l2cap_chan *chan);
+void l2cap_chan_set_defaults(struct l2cap_chan *chan, struct l2cap_chan *pchan);
 int l2cap_ertm_init(struct l2cap_chan *chan);
 void l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan);
 void __l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan);

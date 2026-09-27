@@ -307,9 +307,18 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 	INIT_DELAYED_WORK(&wb->bw_dwork, wb_update_bandwidth_workfn);
 	wb->dirty_sleep = jiffies;
 
+#ifdef CONFIG_CGROUP_WRITEBACK
+	wb->switch_work = kzalloc(sizeof(*wb->switch_work), gfp);
+	if (!wb->switch_work)
+		return -ENOMEM;
+	INIT_WORK(&wb->switch_work->work, inode_switch_wbs_work_fn);
+	wb->switch_work->wb = wb;
+	init_llist_head(&wb->switch_wbs_ctxs);
+#endif
+
 	err = fprop_local_init_percpu(&wb->completions, gfp);
 	if (err)
-		return err;
+		goto out_free_switch_work;
 
 	for (i = 0; i < NR_WB_STAT_ITEMS; i++) {
 		err = percpu_counter_init(&wb->stat[i], 0, gfp);
@@ -323,6 +332,11 @@ out_destroy_stat:
 	while (i--)
 		percpu_counter_destroy(&wb->stat[i]);
 	fprop_local_destroy_percpu(&wb->completions);
+out_free_switch_work:
+#ifdef CONFIG_CGROUP_WRITEBACK
+	kfree(wb->switch_work);
+	wb->switch_work = NULL;
+#endif
 	return err;
 }
 
@@ -363,6 +377,10 @@ static void wb_exit(struct bdi_writeback *wb)
 		percpu_counter_destroy(&wb->stat[i]);
 
 	fprop_local_destroy_percpu(&wb->completions);
+#ifdef CONFIG_CGROUP_WRITEBACK
+	kfree(wb->switch_work);
+	wb->switch_work = NULL;
+#endif
 }
 
 #ifdef CONFIG_CGROUP_WRITEBACK
@@ -415,6 +433,7 @@ static void cgwb_release_workfn(struct work_struct *work)
 	wb_exit(wb);
 	bdi_put(bdi);
 	WARN_ON_ONCE(!list_empty(&wb->b_attached));
+	WARN_ON_ONCE(work_pending(&wb->switch_work->work));
 	call_rcu(&wb->rcu, cgwb_free_rcu);
 }
 

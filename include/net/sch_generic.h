@@ -127,7 +127,8 @@ struct Qdisc {
 
 	struct rcu_head		rcu;
 	netdevice_tracker	dev_tracker;
-	ANDROID_KABI_RESERVE(1);
+	/* net/sched: reject overly deep qdisc hierarchies */
+	ANDROID_KABI_USE(1, int depth);
 
 	/* private data */
 	long privdata[] ____cacheline_aligned;

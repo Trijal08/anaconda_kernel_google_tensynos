@@ -103,6 +103,14 @@ struct wb_completion {
  * Each bdi_writeback that is not embedded into the backing_dev_info must hold
  * a reference to the parent backing_dev_info.  See cgwb_create() for details.
  */
+#ifdef CONFIG_CGROUP_WRITEBACK
+struct bdi_writeback;
+struct wb_switch_work {
+	struct work_struct	work;
+	struct bdi_writeback	*wb;
+};
+#endif
+
 struct bdi_writeback {
 	struct backing_dev_info *bdi;	/* our parent bdi */
 
@@ -162,8 +170,15 @@ struct bdi_writeback {
 	};
 #endif
 
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
+	/*
+	 * writeback: Avoid contention on wb->list_lock when switching inodes
+	 * kABI: the per-wb switch work cannot be embedded, so it is allocated
+	 * separately (struct wb_switch_work) and referenced from a reserved slot.
+	 */
+	ANDROID_KABI_USE(1, struct llist_head switch_wbs_ctxs);	/* queued contexts for
+								 * writeback switching */
+	ANDROID_KABI_USE(2, struct wb_switch_work *switch_work);	/* work used to perform
+								 * inode switching to this wb */
 };
 
 struct backing_dev_info {

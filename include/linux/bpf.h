@@ -197,6 +197,21 @@ struct bpf_map_value_off {
 	struct bpf_map_value_off_desc off[];
 };
 
+enum bpf_cgroup_storage_type {
+	BPF_CGROUP_STORAGE_SHARED,
+	BPF_CGROUP_STORAGE_PERCPU,
+	__BPF_CGROUP_STORAGE_MAX
+};
+
+#define MAX_BPF_CGROUP_STORAGE_TYPE __BPF_CGROUP_STORAGE_MAX
+
+#ifdef CONFIG_CGROUP_BPF
+# define for_each_cgroup_storage_type(stype) \
+	for (stype = 0; stype < MAX_BPF_CGROUP_STORAGE_TYPE; stype++)
+#else
+# define for_each_cgroup_storage_type(stype) for (; false; )
+#endif /* CONFIG_CGROUP_BPF */
+
 struct bpf_map_off_arr {
 	u32 cnt;
 	u32 field_off[BPF_MAP_OFF_ARR_MAX];
@@ -253,6 +268,17 @@ struct bpf_map {
 	} owner;
 	bool bypass_spec_v1;
 	bool frozen; /* write-once; write-protected by freeze_mutex */
+	/*
+	 * kABI: upstream moved the owner data into a separately allocated
+	 * struct bpf_map_owner and added a map cookie.  The frozen GKI layout
+	 * of struct bpf_map ends at offset 262 of 320 bytes, so the extra
+	 * owner state is placed in the tail padding instead; it must not
+	 * change sizeof(struct bpf_map) or any existing offset.
+	 */
+	enum bpf_attach_type owner_expected_attach_type;
+	const struct btf_type *owner_attach_func_proto;
+	u64 owner_storage_cookie[MAX_BPF_CGROUP_STORAGE_TYPE];
+	u64 cookie; /* write-once */
 };
 
 static inline bool map_value_has_spin_lock(const struct bpf_map *map)
@@ -775,14 +801,6 @@ struct bpf_prog_offload {
 	u32			jited_len;
 	ANDROID_KABI_RESERVE(1);
 };
-
-enum bpf_cgroup_storage_type {
-	BPF_CGROUP_STORAGE_SHARED,
-	BPF_CGROUP_STORAGE_PERCPU,
-	__BPF_CGROUP_STORAGE_MAX
-};
-
-#define MAX_BPF_CGROUP_STORAGE_TYPE __BPF_CGROUP_STORAGE_MAX
 
 /* The longest tracepoint has 12 args.
  * See include/trace/bpf_probe.h
@@ -1690,6 +1708,9 @@ out:
 	rcu_read_unlock_trace();
 	return ret;
 }
+
+#define bpf_rcu_lock_held() \
+	(rcu_read_lock_held() || rcu_read_lock_trace_held() || rcu_read_lock_bh_held())
 
 #ifdef CONFIG_BPF_SYSCALL
 DECLARE_PER_CPU(int, bpf_prog_active);

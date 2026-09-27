@@ -188,6 +188,24 @@ extern void add_timer(struct timer_list *timer);
 
 extern int try_to_del_timer_sync(struct timer_list *timer);
 extern int del_timer_sync(struct timer_list *timer);
+extern int timer_shutdown_sync(struct timer_list *timer);
+extern int timer_shutdown(struct timer_list *timer);
+
+/*
+ * kABI: upstream renamed del_timer[_sync]() to timer_delete[_sync]() and
+ * exports the new names.  The exported symbols keep their original names in
+ * this tree; the upstream names are provided as inline wrappers so that
+ * backported code compiles unchanged.
+ */
+static inline int timer_delete_sync(struct timer_list *timer)
+{
+	return del_timer_sync(timer);
+}
+
+static inline int timer_delete(struct timer_list *timer)
+{
+	return del_timer(timer);
+}
 
 extern void init_timers(void);
 struct hrtimer;

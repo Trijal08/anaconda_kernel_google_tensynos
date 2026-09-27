@@ -110,13 +110,14 @@ static int writeset_marked_on_disk(struct dm_disk_bitset *info,
 				   struct writeset_metadata *m, dm_block_t block,
 				   bool *result)
 {
+	int r;
 	dm_block_t old = m->root;
 
 	/*
 	 * The bitset was flushed when it was archived, so we know there'll
 	 * be no change to the root.
 	 */
-	int r = dm_bitset_test_bit(info, m->root, block, &m->root, result);
+	r = dm_bitset_test_bit(info, m->root, block, &m->root, result);
 	if (r) {
 		DMERR("%s: dm_bitset_test_bit failed", __func__);
 		return r;
@@ -204,6 +205,7 @@ static void sb_prepare_for_write(struct dm_block_validator *v,
 static int check_metadata_version(struct superblock_disk *disk)
 {
 	uint32_t metadata_version = le32_to_cpu(disk->version);
+
 	if (metadata_version < MIN_ERA_VERSION || metadata_version > MAX_ERA_VERSION) {
 		DMERR("Era metadata version %u found, but only versions between %u and %u supported.",
 		      metadata_version, MIN_ERA_VERSION, MAX_ERA_VERSION);
@@ -401,6 +403,7 @@ static int ws_eq(void *context, const void *value1, const void *value2)
 static void setup_writeset_tree_info(struct era_metadata *md)
 {
 	struct dm_btree_value_type *vt = &md->writeset_tree_info.value_type;
+
 	md->writeset_tree_info.tm = md->tm;
 	md->writeset_tree_info.levels = 1;
 	vt->context = md;
@@ -411,9 +414,9 @@ static void setup_writeset_tree_info(struct era_metadata *md)
 }
 
 static void setup_era_array_info(struct era_metadata *md)
-
 {
 	struct dm_btree_value_type vt;
+
 	vt.context = NULL;
 	vt.size = sizeof(__le32);
 	vt.inc = NULL;
@@ -795,8 +798,10 @@ static struct era_metadata *metadata_open(struct block_device *bdev,
 	int r;
 	struct era_metadata *md = kzalloc(sizeof(*md), GFP_KERNEL);
 
-	if (!md)
-		return NULL;
+	if (!md) {
+		DMERR("could not allocate metadata struct");
+		return ERR_PTR(-ENOMEM);
+	}
 
 	md->bdev = bdev;
 	md->block_size = block_size;
@@ -1017,6 +1022,7 @@ static int metadata_checkpoint(struct era_metadata *md)
 static int metadata_take_snap(struct era_metadata *md)
 {
 	int r, inc;
+	dm_block_t location;
 	struct dm_block *clone;
 
 	if (md->metadata_snap != SUPERBLOCK_LOCATION) {
@@ -1054,7 +1060,9 @@ static int metadata_take_snap(struct era_metadata *md)
 	r = dm_sm_inc_block(md->sm, md->writeset_tree_root);
 	if (r) {
 		DMERR("%s: couldn't inc writeset tree root", __func__);
+		location = dm_block_location(clone);
 		dm_tm_unlock(md->tm, clone);
+		dm_sm_dec_block(md->sm, location);
 		return r;
 	}
 
@@ -1062,7 +1070,9 @@ static int metadata_take_snap(struct era_metadata *md)
 	if (r) {
 		DMERR("%s: couldn't inc era tree root", __func__);
 		dm_sm_dec_block(md->sm, md->writeset_tree_root);
+		location = dm_block_location(clone);
 		dm_tm_unlock(md->tm, clone);
+		dm_sm_dec_block(md->sm, location);
 		return r;
 	}
 
@@ -1212,6 +1222,7 @@ static dm_block_t get_block(struct era *era, struct bio *bio)
 static void remap_to_origin(struct era *era, struct bio *bio)
 {
 	bio_set_dev(bio, era->origin_dev->bdev);
+	bio->bi_iter.bi_sector = dm_target_offset(era->ti, bio->bi_iter.bi_sector);
 }
 
 /*----------------------------------------------------------------
@@ -1375,6 +1386,7 @@ static int perform_rpc(struct era *era, struct rpc *rpc)
 static int in_worker0(struct era *era, int (*fn)(struct era_metadata *))
 {
 	struct rpc rpc;
+
 	rpc.fn0 = fn;
 	rpc.fn1 = NULL;
 
@@ -1385,6 +1397,7 @@ static int in_worker1(struct era *era,
 		      int (*fn)(struct era_metadata *, void *), void *arg)
 {
 	struct rpc rpc;
+
 	rpc.fn0 = NULL;
 	rpc.fn1 = fn;
 	rpc.arg = arg;
@@ -1536,7 +1549,7 @@ static void era_dtr(struct dm_target *ti)
 static int era_map(struct dm_target *ti, struct bio *bio)
 {
 	struct era *era = ti->private;
-	dm_block_t block = get_block(era, bio);
+	dm_block_t block;
 
 	/*
 	 * All bios get remapped to the origin device.  We do this now, but
@@ -1544,6 +1557,7 @@ static int era_map(struct dm_target *ti, struct bio *bio)
 	 * block is marked in this era.
 	 */
 	remap_to_origin(era, bio);
+	block = get_block(era, bio);
 
 	/*
 	 * REQ_PREFLUSH bios carry no data, so we're not interested in them.
@@ -1694,6 +1708,7 @@ static int era_iterate_devices(struct dm_target *ti,
 			       iterate_devices_callout_fn fn, void *data)
 {
 	struct era *era = ti->private;
+
 	return fn(ti, era->origin_dev, 0, get_dev_size(era->origin_dev), data);
 }
 
