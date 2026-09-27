@@ -581,18 +581,17 @@ int exynos_isp_cooling_init(void)
 	struct thermal_cooling_device *dev;
 	int ret = 0;
 
+	np = of_find_node_by_name(NULL, "exynos_isp_thermal");
+	if (!np) {
+		pr_info("[ISP cooling] no exynos_isp_thermal node, skipping\n");
+		return -ENODEV;
+	}
+
 	ret = isp_cooling_table_init();
 
 	if (ret) {
 		pr_err("Fail to initialize isp_cooling_table\n");
 		return ret;
-	}
-
-	np = of_find_node_by_name(NULL, "exynos_isp_thermal");
-
-	if (!np) {
-		pr_err("Fail to find device node\n");
-		return -EINVAL;
 	}
 
 	dev = of_isp_cooling_register(np, 0);
