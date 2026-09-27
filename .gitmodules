@@ -21,3 +21,7 @@
 	path = v4l2loopback
 	url = https://github.com/v4l2loopback/v4l2loopback.git
 	branch = main
+[submodule "NoMount"]
+	path = NoMount
+	url = https://github.com/maxsteeel/nomount.git
+	branch = master
