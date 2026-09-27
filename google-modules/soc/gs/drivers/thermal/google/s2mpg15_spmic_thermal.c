@@ -307,12 +307,21 @@ static int s2mpg15_spmic_wait_for_sensors_ready(
 		if (ret_code)
 			dev_warn(dev, "Sensor %d LPF write fail with ret:%d\n", i, ret_code);
 		mutex_unlock(&s2mpg15_spmic_thermal->adc_chan_lock);
-		thermal_zone_device_update(s2mpg15_spmic_thermal->sensor[i].tzd,
-					   THERMAL_EVENT_UNSPECIFIED);
 	}
 	/* set up spmic driver info for API access*/
 	spmic_thermal_chip = s2mpg15_spmic_thermal;
 	s2mpg15_spmic_thermal->sensors_ready = true;
+
+	/*
+	 * Enable and update the zones only now: with sensors_ready set,
+	 * get_temp()/set_trips() no longer fail with -EAGAIN.
+	 */
+	for_each_set_bit(i, &enabled_channels, GTHERM_CHAN_NUM) {
+		struct thermal_zone_device *tzd = s2mpg15_spmic_thermal->sensor[i].tzd;
+
+		thermal_zone_device_enable(tzd);
+		thermal_zone_device_update(tzd, THERMAL_EVENT_UNSPECIFIED);
+	}
 	return ret_code;
 }
 
@@ -524,8 +533,14 @@ static int s2mpg15_spmic_thermal_set_trips(struct thermal_zone_device *tz, int l
 	int emul_temp, low_volt, high_volt, ret = 0;
 	u8 low_raw, high_raw;
 
+	/*
+	 * thermal_of_zone_register() enables the zone and runs the first
+	 * update before the ADC channels are ready. Nothing can be programmed
+	 * yet; the trip window is applied by the update issued from
+	 * s2mpg15_spmic_wait_for_sensors_ready() once the sensors are ready.
+	 */
 	if (!s2mpg15_spmic_thermal->sensors_ready)
-		return -EAGAIN;
+		return 0;
 
 	/* Set threshold to extreme value when emul_temp set */
 	emul_temp = s->emul_temperature;
@@ -777,10 +792,12 @@ s2mpg15_spmic_thermal_register_tzd(struct s2mpg15_spmic_thermal_chip *s2mpg15_sp
 			return -EINVAL;
 		}
 		s2mpg15_spmic_thermal->sensor[i].tzd = tzd;
-		if (s2mpg15_spmic_thermal->adc_chan_en & mask)
-			thermal_zone_device_enable(tzd);
-		else
-			thermal_zone_device_disable(tzd);
+		/*
+		 * Enabled channels are switched on by
+		 * s2mpg15_spmic_wait_for_sensors_ready() once the ADC data is
+		 * valid; enabling here makes the first set_trips() fail (-EAGAIN).
+		 */
+		thermal_zone_device_disable(tzd);
 
 		ret = device_create_file(&tzd->device, &dev_attr_tz_temp);
 		if (ret) {
