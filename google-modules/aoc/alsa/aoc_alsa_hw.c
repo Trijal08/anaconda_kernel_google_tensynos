@@ -219,10 +219,18 @@ static int aoc_audio_control(const char *cmd_channel, const uint8_t *cmd,
 
 #ifndef ALSA_AOC_CMD_LOG_DISABLE
 	cmd_count++;
-	pr_notice_ratelimited(ALSA_AOC_CMD
-			      " cmd [%s] id %#06x, size %zu, cntr %d\n",
-			      CMD_CHANNEL(dev), ((struct CMD_HDR *)cmd)->id,
-			      cmd_size, cmd_count);
+	/*
+	 * Not ratelimited: the per-callsite state is 5s/10 messages, and a
+	 * voice call setup issues ~50 commands in one burst, so everything
+	 * that configures telephony was being dropped.  Dump the payload too
+	 * -- the command id alone does not show which source, sink or mode a
+	 * command carried.
+	 */
+	pr_notice(ALSA_AOC_CMD " cmd [%s] id %#06x, size %zu, cntr %d\n",
+		  CMD_CHANNEL(dev), ((struct CMD_HDR *)cmd)->id,
+		  cmd_size, cmd_count);
+	print_hex_dump(KERN_NOTICE, ALSA_AOC_CMD " pay: ", DUMP_PREFIX_NONE,
+		       64, 1, cmd, (cmd_size > 64 ? 64 : cmd_size), false);
 #endif
 
 	buffer = kmalloc_array(buffer_size, sizeof(*buffer), GFP_ATOMIC);
