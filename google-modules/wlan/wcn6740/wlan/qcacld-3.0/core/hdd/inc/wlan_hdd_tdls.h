@@ -106,6 +106,19 @@ int wlan_hdd_cfg80211_tdls_oper(struct wiphy *wiphy,
 				enum nl80211_tdls_operation oper);
 #endif
 
+/*
+ * cfg80211_ops.tdls_mgmt() gained a link_id parameter in mainline 6.4
+ * ("wifi: cfg80211: make TDLS management link-aware", c6112046b1a9), which
+ * was backported into the 6.1 LTS series in 6.1.189 as a dependency of
+ * 038e1d126304 ("wifi: mac80211: require a peer station for TDLS setup
+ * confirm").  A plain >= 6.4 test therefore misses 6.1.189 and later.
+ */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)) || \
+	(LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 189) && \
+	LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
+#define HDD_CFG80211_TDLS_MGMT_LINK_ID
+#endif
+
 #ifdef TDLS_MGMT_VERSION2
 int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
 				struct net_device *dev, u8 *peer,
@@ -113,7 +126,14 @@ int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
 				u16 status_code, u32 peer_capability,
 				const u8 *buf, size_t len);
 #else
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
+#if defined(HDD_CFG80211_TDLS_MGMT_LINK_ID)
+int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
+				struct net_device *dev, const uint8_t *peer,
+				int link_id, uint8_t action_code,
+				uint8_t dialog_token, uint16_t status_code,
+				uint32_t peer_capability, bool initiator,
+				const uint8_t *buf, size_t len);
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
 int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
 				struct net_device *dev, const uint8_t *peer,
 				uint8_t action_code, uint8_t dialog_token,
