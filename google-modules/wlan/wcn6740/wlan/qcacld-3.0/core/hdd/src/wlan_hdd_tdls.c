@@ -552,7 +552,15 @@ int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
 					u16 status_code, u32 peer_capability,
 					const u8 *buf, size_t len)
 #else /* TDLS_MGMT_VERSION2 */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0)) || defined(WITH_BACKPORTS)
+#if defined(HDD_CFG80211_TDLS_MGMT_LINK_ID)
+int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
+					struct net_device *dev,
+					const u8 *peer, int link_id,
+					u8 action_code,
+					u8 dialog_token, u16 status_code,
+					u32 peer_capability, bool initiator,
+					const u8 *buf, size_t len)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0)) || defined(WITH_BACKPORTS)
 int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
 					struct net_device *dev,
 					const u8 *peer, u8 action_code,
