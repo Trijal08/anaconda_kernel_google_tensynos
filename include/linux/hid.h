@@ -689,7 +689,8 @@ struct hid_device {							/* device report descriptor */
 	unsigned int id;						/* system unique id */
 
 	ANDROID_KABI_USE(1, struct { __s32 battery_charge_status; u32 padding; });
-	ANDROID_KABI_RESERVE(2);
+	/* ID of probe devres group */
+	ANDROID_KABI_USE(2, void *devres_group_id);
 };
 
 #define to_hid_device(pdev) \

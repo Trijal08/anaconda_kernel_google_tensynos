@@ -1951,7 +1951,7 @@ struct xhci_hcd {
 	/* Used for bug 194461020 */
 	ANDROID_KABI_USE(1, struct xhci_vendor_ops *vendor_ops);
 
-	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_USE(2, unsigned int dma_mask_bits);
 	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);
 

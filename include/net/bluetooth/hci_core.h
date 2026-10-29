@@ -26,6 +26,7 @@
 #define __HCI_CORE_H
 
 #include <linux/idr.h>
+#include <linux/spinlock.h>
 #include <linux/leds.h>
 #include <linux/rculist.h>
 #include <linux/android_kabi.h>
@@ -33,6 +34,7 @@
 #include <net/bluetooth/hci.h>
 #include <net/bluetooth/hci_sync.h>
 #include <net/bluetooth/hci_sock.h>
+#include <net/bluetooth/coredump.h>
 
 /* HCI priority */
 #define HCI_PRIO_MAX	7
@@ -125,7 +127,7 @@ enum suspended_state {
 struct hci_conn_hash {
 	struct list_head list;
 	unsigned int     acl_num;
-	unsigned int     amp_num;
+	unsigned int     amp_num;	/* kABI placeholder (unused) */
 	unsigned int     sco_num;
 	unsigned int     iso_num;
 	unsigned int     le_num;
@@ -241,6 +243,7 @@ struct adv_info {
 	bool	periodic;
 	__u8	mesh;
 	__u8	instance;
+	__u8	handle;
 	__u32	flags;
 	__u16	timeout;
 	__u16	remaining_time;
@@ -335,6 +338,17 @@ struct adv_monitor {
 /* Default authenticated payload timeout 30s */
 #define DEFAULT_AUTH_PAYLOAD_TIMEOUT   0x0bb8
 
+#define HCI_MAX_PAGES	3
+
+/*
+ * kABI: AMP/High Speed support was removed upstream ("Bluetooth: HCI: Remove
+ * HCI_AMP support", "Bluetooth: Remove BT_HS").  The structures below are kept
+ * only as layout placeholders so that struct hci_dev, struct hci_conn and
+ * struct hci_conn_hash keep their frozen GKI layout.  The old loc_assoc slot
+ * (680 bytes) is reused for members that upstream later added to hci_dev.
+ */
+#define HCI_MAX_AMP_ASSOC_SIZE	672
+
 struct amp_assoc {
 	__u16	len;
 	__u16	offset;
@@ -343,7 +357,7 @@ struct amp_assoc {
 	__u8	data[HCI_MAX_AMP_ASSOC_SIZE];
 };
 
-#define HCI_MAX_PAGES	3
+struct amp_mgr;
 
 struct hci_dev {
 	struct list_head list;
@@ -353,7 +367,7 @@ struct hci_dev {
 	unsigned long	flags;
 	__u16		id;
 	__u8		bus;
-	__u8		dev_type;
+	__u8		dev_type;	/* kABI placeholder (unused) */
 	bdaddr_t	bdaddr;
 	bdaddr_t	setup_addr;
 	bdaddr_t	public_addr;
@@ -459,6 +473,7 @@ struct hci_dev {
 	__u16		sniff_min_interval;
 	__u16		sniff_max_interval;
 
+	/* kABI placeholders: former AMP fields, unused */
 	__u8		amp_status;
 	__u32		amp_total_bw;
 	__u32		amp_max_bw;
@@ -470,9 +485,24 @@ struct hci_dev {
 	__u32		amp_max_flush_to;
 	__u32		amp_be_flush_to;
 
-	struct amp_assoc	loc_assoc;
+	union {
+		/* kABI placeholder: former AMP local assoc data, unused */
+		struct amp_assoc	loc_assoc;
+		struct {
+			/* Bluetooth: mgmt: fix 'hdev->discovery.uuids' NULL
+			 * dereference (upstream: discovery.lock)
+			 */
+			spinlock_t		discovery_lock;
+			/* Bluetooth: MGMT: Protect mgmt_pending list with its
+			 * own lock
+			 */
+			struct mutex		mgmt_pending_lock;
+			/* Bluetooth: Add support for hci devcoredump */
+			struct hci_devcoredump	dump;
+		};
+	};
 
-	__u8		flow_ctl_mode;
+	__u8		flow_ctl_mode;	/* kABI placeholder (unused) */
 
 	unsigned int	auto_accept_delay;
 
@@ -493,6 +523,7 @@ struct hci_dev {
 	unsigned int	le_pkts;
 	unsigned int	iso_pkts;
 
+	/* kABI placeholders: former AMP block flow control fields, unused */
 	__u16		block_len;
 	__u16		block_mtu;
 	__u16		num_blocks;
@@ -674,6 +705,10 @@ struct hci_dev {
 	ANDROID_KABI_RESERVE(4);
 };
 
+/* kABI: the members overlaid on loc_assoc must fit in the old slot */
+static_assert(offsetof(struct hci_dev, flow_ctl_mode) ==
+	      offsetof(struct hci_dev, loc_assoc) + sizeof(struct amp_assoc));
+
 #define HCI_PHY_HANDLE(handle)	(handle & 0xff)
 
 enum conn_reasons {
@@ -768,7 +803,7 @@ struct hci_conn {
 	void		*l2cap_data;
 	void		*sco_data;
 	void		*iso_data;
-	struct amp_mgr	*amp_mgr;
+	struct amp_mgr	*amp_mgr;	/* kABI placeholder (unused) */
 
 	struct hci_conn	*link;
 	struct bt_codec codec;
@@ -792,7 +827,7 @@ struct hci_chan {
 	struct sk_buff_head data_q;
 	unsigned int	sent;
 	__u8		state;
-	bool		amp;
+	bool		amp;		/* kABI placeholder (unused) */
 
 	ANDROID_KABI_RESERVE(1);
 };
@@ -896,6 +931,7 @@ static inline void iso_recv(struct hci_conn *hcon, struct sk_buff *skb,
 
 static inline void discovery_init(struct hci_dev *hdev)
 {
+	spin_lock_init(&hdev->discovery_lock);
 	hdev->discovery.state = DISCOVERY_STOPPED;
 	INIT_LIST_HEAD(&hdev->discovery.all);
 	INIT_LIST_HEAD(&hdev->discovery.unknown);
@@ -909,9 +945,13 @@ static inline void hci_discovery_filter_clear(struct hci_dev *hdev)
 	hdev->discovery.result_filtering = false;
 	hdev->discovery.report_invalid_rssi = true;
 	hdev->discovery.rssi = HCI_RSSI_INVALID;
+
+	spin_lock(&hdev->discovery_lock);
 	hdev->discovery.uuid_count = 0;
 	kfree(hdev->discovery.uuids);
 	hdev->discovery.uuids = NULL;
+	spin_unlock(&hdev->discovery_lock);
+
 	hdev->discovery.scan_start = 0;
 	hdev->discovery.scan_duration = 0;
 }
@@ -999,9 +1039,6 @@ static inline void hci_conn_hash_add(struct hci_dev *hdev, struct hci_conn *c)
 	case ACL_LINK:
 		h->acl_num++;
 		break;
-	case AMP_LINK:
-		h->amp_num++;
-		break;
 	case LE_LINK:
 		h->le_num++;
 		if (c->role == HCI_ROLE_SLAVE)
@@ -1028,9 +1065,6 @@ static inline void hci_conn_hash_del(struct hci_dev *hdev, struct hci_conn *c)
 	case ACL_LINK:
 		h->acl_num--;
 		break;
-	case AMP_LINK:
-		h->amp_num--;
-		break;
 	case LE_LINK:
 		h->le_num--;
 		if (c->role == HCI_ROLE_SLAVE)
@@ -1052,8 +1086,6 @@ static inline unsigned int hci_conn_num(struct hci_dev *hdev, __u8 type)
 	switch (type) {
 	case ACL_LINK:
 		return h->acl_num;
-	case AMP_LINK:
-		return h->amp_num;
 	case LE_LINK:
 		return h->le_num;
 	case SCO_LINK:
@@ -1070,7 +1102,7 @@ static inline unsigned int hci_conn_count(struct hci_dev *hdev)
 {
 	struct hci_conn_hash *c = &hdev->conn_hash;
 
-	return c->acl_num + c->amp_num + c->sco_num + c->le_num + c->iso_num;
+	return c->acl_num + c->sco_num + c->le_num + c->iso_num;
 }
 
 static inline bool hci_conn_valid(struct hci_dev *hdev, struct hci_conn *conn)
@@ -1220,7 +1252,9 @@ static inline struct hci_conn *hci_conn_hash_lookup_le(struct hci_dev *hdev,
 
 static inline struct hci_conn *hci_conn_hash_lookup_cis(struct hci_dev *hdev,
 							bdaddr_t *ba,
-							__u8 ba_type)
+							__u8 ba_type,
+							__u8 cig,
+							__u8 id)
 {
 	struct hci_conn_hash *h = &hdev->conn_hash;
 	struct hci_conn  *c;
@@ -1231,7 +1265,16 @@ static inline struct hci_conn *hci_conn_hash_lookup_cis(struct hci_dev *hdev,
 		if (c->type != ISO_LINK)
 			continue;
 
-		if (ba_type == c->dst_type && !bacmp(&c->dst, ba)) {
+		/* Match CIG ID if set */
+		if (cig != c->iso_qos.cig)
+			continue;
+
+		/* Match CIS ID if set */
+		if (id != c->iso_qos.cis)
+			continue;
+
+		/* Match destination address if set */
+		if (!ba || (ba_type == c->dst_type && !bacmp(&c->dst, ba))) {
 			rcu_read_unlock();
 			return c;
 		}
@@ -1459,10 +1502,6 @@ static inline void hci_conn_drop(struct hci_conn *conn)
 			}
 			break;
 
-		case AMP_LINK:
-			timeo = conn->disc_timeout;
-			break;
-
 		default:
 			timeo = 0;
 			break;
@@ -1548,6 +1587,15 @@ static inline void hci_set_aosp_capable(struct hci_dev *hdev)
 {
 #if IS_ENABLED(CONFIG_BT_AOSPEXT)
 	hdev->aosp_capable = true;
+#endif
+}
+
+static inline void hci_devcd_setup(struct hci_dev *hdev)
+{
+#ifdef CONFIG_DEV_COREDUMP
+	INIT_WORK(&hdev->dump.dump_rx, hci_devcd_rx);
+	INIT_DELAYED_WORK(&hdev->dump.dump_timeout, hci_devcd_timeout);
+	skb_queue_head_init(&hdev->dump.dump_q);
 #endif
 }
 

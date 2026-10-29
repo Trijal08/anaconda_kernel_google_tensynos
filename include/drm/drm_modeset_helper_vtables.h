@@ -1267,6 +1267,7 @@ struct drm_plane_helper_funcs {
 	 */
 	void (*atomic_update)(struct drm_plane *plane,
 			      struct drm_atomic_state *state);
+
 	/**
 	 * @atomic_disable:
 	 *
