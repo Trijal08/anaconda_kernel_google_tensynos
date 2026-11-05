@@ -12,6 +12,10 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
+#include <linux/proc_fs.h>
+#include <linux/fs.h>
+#include <linux/sizes.h>
+#include <asm/unaligned.h>
 #include <linux/platform_device.h>
 #include <linux/kallsyms.h>
 #include <linux/shm_ipc.h>
@@ -756,6 +760,171 @@ static inline int check_txq_space(struct mem_link_device *mld,
 	return space;
 }
 
+/*
+ * /proc/sitdump -- every app message crossing a legacy ring, both directions.
+ *
+ * Record layout, little endian, records packed back to back:
+ *
+ *	[u64 ts_ns][u16 len][u16 tag][len bytes of the message]
+ *
+ * @tag is (channel << 8) | direction, 0 for AP->CP and 1 for CP->AP, and @ts
+ * is CLOCK_BOOTTIME.  What is stored is the message, not the frame: the
+ * 12-byte EXYNOS header is where the channel and direction come from, so
+ * keeping it would record the same thing twice.  A reader walks with a stride
+ * of 12 + len and must accept len >= 1 -- short oem frames are smaller than a
+ * SIT header, and a len >= 12 check desynchronises the walk.
+ *
+ * This exists to be diffed against the same capture taken on mainline, which
+ * writes this exact container, so one parser reads both.  Fills and stops
+ * rather than wrapping: a boot is what gets compared, and stopping leaves a
+ * dump that parses to its end.
+ */
+#define SITDUMP_SIZE		SZ_16M
+#define SITDUMP_REC_HDR		12
+
+static struct {
+	u8		*buf;
+	size_t		used;
+	u64		dropped;
+	bool		on;
+	spinlock_t	lock;
+} sitdump = {
+	.lock = __SPIN_LOCK_UNLOCKED(sitdump.lock),
+};
+
+static void sitdump_record(u8 *frm, unsigned int frm_len, bool rx)
+{
+	unsigned int plen;
+	unsigned long flags;
+	size_t need;
+	u8 *p;
+
+	if (!READ_ONCE(sitdump.on))
+		return;
+	/*
+	 * Take the length from the header, not from the skb: a frame is padded
+	 * to an 8-byte boundary (exynos_calc_padding_size) and the skb covers
+	 * the padding, so skb->len - 12 over-reports a 17-byte message as 20
+	 * and appends three zero bytes to it. Mainline's capture stores the
+	 * message exactly, and these dumps are only useful if they agree.
+	 */
+	if (frm_len <= EXYNOS_HEADER_SIZE)
+		return;
+	plen = exynos_get_frame_len(frm);
+	if (plen <= EXYNOS_HEADER_SIZE || plen > frm_len)
+		return;
+	plen -= EXYNOS_HEADER_SIZE;
+	if (plen > U16_MAX)
+		return;
+	need = SITDUMP_REC_HDR + plen;
+
+	spin_lock_irqsave(&sitdump.lock, flags);
+	if (!sitdump.buf || sitdump.used + need > SITDUMP_SIZE) {
+		if (sitdump.buf)
+			sitdump.dropped++;
+		spin_unlock_irqrestore(&sitdump.lock, flags);
+		return;
+	}
+	p = sitdump.buf + sitdump.used;
+	put_unaligned_le64(ktime_get_boottime_ns(), p);
+	put_unaligned_le16(plen, p + 8);
+	put_unaligned_le16(((u16)exynos_get_ch(frm) << 8) | (rx ? 1 : 0), p + 10);
+	memcpy(p + SITDUMP_REC_HDR, frm + EXYNOS_HEADER_SIZE, plen);
+	sitdump.used += need;
+	spin_unlock_irqrestore(&sitdump.lock, flags);
+}
+
+static ssize_t sitdump_proc_read(struct file *file, char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	size_t used = READ_ONCE(sitdump.used);
+
+	if (!sitdump.buf)
+		return 0;
+	return simple_read_from_buffer(buf, count, ppos, sitdump.buf, used);
+}
+
+static const struct proc_ops sitdump_proc_ops = {
+	.proc_read	= sitdump_proc_read,
+	.proc_lseek	= default_llseek,
+};
+
+static ssize_t sitdump_ctl_read(struct file *file, char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	char line[64];
+	int n;
+
+	n = scnprintf(line, sizeof(line), "%u %zu %zu %llu\n",
+		      READ_ONCE(sitdump.on) ? 1 : 0, READ_ONCE(sitdump.used),
+		      (size_t)SITDUMP_SIZE, sitdump.dropped);
+	return simple_read_from_buffer(buf, count, ppos, line, n);
+}
+
+/* Write 1 to start (and discard the previous run), 0 to stop and keep it. */
+static ssize_t sitdump_ctl_write(struct file *file, const char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	unsigned long flags;
+	void *fresh = NULL;
+	bool on;
+	int ret;
+
+	ret = kstrtobool_from_user(buf, count, &on);
+	if (ret)
+		return ret;
+
+	if (on && !sitdump.buf) {
+		fresh = vmalloc(SITDUMP_SIZE);
+		if (!fresh)
+			return -ENOMEM;
+	}
+
+	spin_lock_irqsave(&sitdump.lock, flags);
+	if (on) {
+		if (fresh && !sitdump.buf) {
+			sitdump.buf = fresh;
+			fresh = NULL;
+		}
+		sitdump.used = 0;
+		sitdump.dropped = 0;
+		WRITE_ONCE(sitdump.on, true);
+	} else {
+		WRITE_ONCE(sitdump.on, false);
+	}
+	spin_unlock_irqrestore(&sitdump.lock, flags);
+
+	vfree(fresh);
+	mif_info("sitdump %s\n", on ? "started" : "stopped");
+	return count;
+}
+
+static const struct proc_ops sitdump_ctl_ops = {
+	.proc_read	= sitdump_ctl_read,
+	.proc_write	= sitdump_ctl_write,
+	.proc_lseek	= default_llseek,
+};
+
+/*
+ * Capture from here rather than from a trigger: what is wanted is the boot,
+ * and by the time anything in user space could arm it the boot is over.
+ */
+static void sitdump_init(void)
+{
+	if (sitdump.buf)		/* one link device per boot, but do not leak */
+		return;
+
+	sitdump.buf = vmalloc(SITDUMP_SIZE);
+	if (!sitdump.buf)
+		return;
+	WRITE_ONCE(sitdump.on, true);
+	if (!proc_create("sitdump", 0400, NULL, &sitdump_proc_ops))
+		mif_err("sitdump: failed to create /proc/sitdump\n");
+	if (!proc_create("sitdump_ctl", 0600, NULL, &sitdump_ctl_ops))
+		mif_err("sitdump: failed to create /proc/sitdump_ctl\n");
+	mif_info("sitdump: capturing to /proc/sitdump\n");
+}
+
 static int txq_write(struct mem_link_device *mld, struct legacy_ipc_device *dev,
 		     struct sk_buff *skb)
 {
@@ -781,6 +950,8 @@ static int txq_write(struct mem_link_device *mld, struct legacy_ipc_device *dev,
 
 	/* Commit the item before incrementing the head */
 	smp_mb();
+
+	sitdump_record(skb->data, count, false);
 
 	return count;
 }
@@ -1749,6 +1920,8 @@ static int legacy_ipc_rx_func_napi(struct mem_link_device *mld, struct legacy_ip
 		if (err)
 			return err;
 
+		sitdump_record(skb->data, skb->len, true);
+
 		ch = ld->get_ch(skb->data);
 		iod = link_get_iod_with_channel(ld, ch);
 		if (!iod) {
@@ -1841,6 +2014,8 @@ static int legacy_ipc_rx_func(struct mem_link_device *mld, struct legacy_ipc_dev
 		skb = recv_from_legacy_link(mld, dev, in, &err);
 		if (err)
 			return err;
+
+		sitdump_record(skb->data, skb->len, true);
 
 		ch = ld->get_ch(skb->data);
 		iod = link_get_iod_with_channel(ld, ch);
@@ -4215,6 +4390,8 @@ struct link_device *s5400_create_link_device(struct platform_device *pdev, u32 l
 	u32 cp_num;
 
 	mif_info("+++\n");
+
+	sitdump_init();
 
 	/**
 	 * Get the modem (platform) data
