@@ -87,6 +87,18 @@ extern enum blk_eh_timer_return scsi_timeout(struct request *req);
 extern int scsi_error_handler(void *host);
 extern enum scsi_disposition scsi_decide_disposition(struct scsi_cmnd *cmd);
 extern void scsi_eh_wakeup(struct Scsi_Host *shost, unsigned int busy);
+/*
+ * kABI: struct Scsi_Host cannot grow, so shost->eh_work points at the
+ * work_struct embedded here and the host is recovered from the wrapper.
+ */
+struct scsi_eh_wakeup_work {
+	struct work_struct work;
+	struct Scsi_Host *shost;
+};
+
+extern void scsi_rcu_eh_wakeup(struct work_struct *work);
+extern int scsi_eh_wakeup_work_init(struct Scsi_Host *shost);
+extern void scsi_eh_wakeup_work_exit(struct Scsi_Host *shost);
 extern void scsi_eh_scmd_add(struct scsi_cmnd *);
 void scsi_eh_ready_devs(struct Scsi_Host *shost,
 			struct list_head *work_q,

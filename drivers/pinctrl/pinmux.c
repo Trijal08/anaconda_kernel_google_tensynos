@@ -235,6 +235,15 @@ static const char *pin_free(struct pinctrl_dev *pctldev, int pin,
 			if (desc->mux_usecount)
 				return NULL;
 		}
+
+		if (gpio_range) {
+			owner = desc->gpio_owner;
+			desc->gpio_owner = NULL;
+		} else {
+			owner = desc->mux_owner;
+			desc->mux_owner = NULL;
+			desc->mux_setting = NULL;
+		}
 	}
 
 	/*
@@ -246,16 +255,6 @@ static const char *pin_free(struct pinctrl_dev *pctldev, int pin,
 	else if (ops->free)
 		ops->free(pctldev, pin);
 
-	scoped_guard(mutex, &desc->mux_lock) {
-		if (gpio_range) {
-			owner = desc->gpio_owner;
-			desc->gpio_owner = NULL;
-		} else {
-			owner = desc->mux_owner;
-			desc->mux_owner = NULL;
-			desc->mux_setting = NULL;
-		}
-	}
 
 	module_put(pctldev->owner);
 

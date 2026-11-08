@@ -138,6 +138,8 @@ struct latency_stat {
 
 struct iolatency_grp {
 	struct blkg_policy_data pd;
+	/* kABI: rcu_head lives here, not in struct blkg_policy_data */
+	struct rcu_head rcu_head;
 	struct latency_stat __percpu *stats;
 	struct latency_stat cur_stat;
 	struct blk_iolatency *blkiolat;
@@ -1025,11 +1027,27 @@ static void iolatency_pd_offline(struct blkg_policy_data *pd)
 	iolatency_clear_scaling(blkg);
 }
 
-static void iolatency_pd_free(struct blkg_policy_data *pd)
+static void iolat_release(struct rcu_head *rcu)
 {
-	struct iolatency_grp *iolat = pd_to_lat(pd);
+	struct iolatency_grp *iolat =
+		container_of(rcu, struct iolatency_grp, rcu_head);
+
 	free_percpu(iolat->stats);
 	kfree(iolat);
+}
+
+static void iolatency_pd_free(struct blkg_policy_data *pd)
+{
+	struct blkcg_gq *blkg = pd_to_blkg(pd);
+
+	/*
+	 * Groups throttled as collateral have min_lat_nsec == 0, so
+	 * iolatency_pd_offline() leaves their delay set.  Drop it here, where
+	 * no in-flight bio can re-arm it via check_scale_change().
+	 */
+	if (blkg)
+		blkcg_clear_delay(blkg);
+	call_rcu(&pd_to_lat(pd)->rcu_head, iolat_release);
 }
 
 static struct cftype iolatency_files[] = {

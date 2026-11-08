@@ -63,7 +63,7 @@ struct inquiry_entry {
 		NAME_PENDING,
 		NAME_KNOWN,
 	} name_state;
-	__u32			timestamp;
+	unsigned long		timestamp;
 	struct inquiry_data	data;
 };
 
@@ -79,7 +79,7 @@ struct discovery_state {
 	struct list_head	all;	/* All devices found during inquiry */
 	struct list_head	unknown;	/* Name state not known */
 	struct list_head	resolve;	/* Name needs to be resolved */
-	__u32			timestamp;
+	unsigned long		timestamp;
 	bdaddr_t		last_adv_addr;
 	u8			last_adv_addr_type;
 	s8			last_adv_rssi;
@@ -814,7 +814,8 @@ struct hci_conn {
 
 	void (*cleanup)(struct hci_conn *conn);
 
-	ANDROID_KABI_RESERVE(1);
+	/* Bluetooth: L2CAP: Fix div-by-zero in l2cap_le_flowctl_init() */
+	ANDROID_KABI_USE(1, __u16 mtu);
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);

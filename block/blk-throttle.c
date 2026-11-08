@@ -486,14 +486,21 @@ static void throtl_pd_offline(struct blkg_policy_data *pd)
 		throtl_upgrade_state(tg->td);
 }
 
+static void tg_release(struct rcu_head *rcu)
+{
+	struct throtl_grp *tg = container_of(rcu, struct throtl_grp, rcu_head);
+
+	blkg_rwstat_exit(&tg->stat_bytes);
+	blkg_rwstat_exit(&tg->stat_ios);
+	kfree(tg);
+}
+
 static void throtl_pd_free(struct blkg_policy_data *pd)
 {
 	struct throtl_grp *tg = pd_to_tg(pd);
 
 	del_timer_sync(&tg->service_queue.pending_timer);
-	blkg_rwstat_exit(&tg->stat_bytes);
-	blkg_rwstat_exit(&tg->stat_ios);
-	kfree(tg);
+	call_rcu(&tg->rcu_head, tg_release);
 }
 
 static struct throtl_grp *

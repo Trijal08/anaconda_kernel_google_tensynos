@@ -94,6 +94,8 @@ static void blkg_free_workfn(struct work_struct *work)
 		if (blkg->pd[i])
 			blkcg_policy[i]->pd_free_fn(blkg->pd[i]);
 
+	if (blkg->parent)
+		blkg_put(blkg->parent);
 	if (blkg->q)
 		blk_put_queue(blkg->q);
 	free_percpu(blkg->iostat_cpu);
@@ -128,8 +130,6 @@ static void __blkg_release(struct rcu_head *rcu)
 
 	/* release the blkcg and parent blkg refs this blkg has been holding */
 	css_put(&blkg->blkcg->css);
-	if (blkg->parent)
-		blkg_put(blkg->parent);
 	blkg_free(blkg);
 }
 
@@ -649,6 +649,13 @@ struct block_device *blkcg_conf_open_bdev(char **inputp)
 		return ERR_PTR(-ENODEV);
 	}
 
+	mutex_lock(&bdev->bd_queue->rq_qos_mutex);
+	if (!disk_live(bdev->bd_disk)) {
+		mutex_unlock(&bdev->bd_queue->rq_qos_mutex);
+		blkdev_put_no_open(bdev);
+		return ERR_PTR(-ENODEV);
+	}
+
 	*inputp = input;
 	return bdev;
 }
@@ -772,6 +779,7 @@ fail_unlock:
 fail_exit_queue:
 	blk_queue_exit(q);
 fail:
+	mutex_unlock(&q->rq_qos_mutex);
 	blkdev_put_no_open(bdev);
 	/*
 	 * If queue was bypassing, we should retry.  Do so after a
@@ -796,9 +804,11 @@ EXPORT_SYMBOL_GPL(blkg_conf_prep);
  */
 void blkg_conf_finish(struct blkg_conf_ctx *ctx)
 	__releases(&ctx->bdev->bd_queue->queue_lock) __releases(rcu)
+	__releases(&ctx->bdev->bd_queue->rq_qos_mutex)
 {
 	spin_unlock_irq(&bdev_get_queue(ctx->bdev)->queue_lock);
 	rcu_read_unlock();
+	mutex_unlock(&ctx->bdev->bd_queue->rq_qos_mutex);
 	blkdev_put_no_open(ctx->bdev);
 }
 EXPORT_SYMBOL_GPL(blkg_conf_finish);
@@ -1290,7 +1300,9 @@ int blkcg_init_disk(struct gendisk *disk)
 	if (ret)
 		goto err_ioprio_exit;
 
+	mutex_lock(&q->rq_qos_mutex);
 	ret = blk_iolatency_init(disk);
+	mutex_unlock(&q->rq_qos_mutex);
 	if (ret)
 		goto err_throtl_exit;
 
@@ -2008,7 +2020,7 @@ void blk_cgroup_bio_start(struct bio *bio)
 
 	u64_stats_update_end_irqrestore(&bis->sync, flags);
 	if (cgroup_subsys_on_dfl(io_cgrp_subsys))
-		cgroup_rstat_updated(bio->bi_blkg->blkcg->css.cgroup, cpu);
+		__cgroup_rstat_updated(bio->bi_blkg->blkcg->css.cgroup, cpu);
 	put_cpu();
 }
 

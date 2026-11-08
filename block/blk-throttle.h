@@ -67,6 +67,8 @@ enum {
 struct throtl_grp {
 	/* must be the first member */
 	struct blkg_policy_data pd;
+	/* kABI: rcu_head lives here, not in struct blkg_policy_data */
+	struct rcu_head rcu_head;
 
 	/* active throtl group service_queue member */
 	struct rb_node rb_node;
