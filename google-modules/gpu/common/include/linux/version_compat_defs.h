@@ -600,7 +600,13 @@ static inline void kbase_lockdep_assert_not_held(struct rt_mutex *lock)
 #endif
 }
 
-#if KERNEL_VERSION(6, 3, 0) > LINUX_VERSION_CODE
+/*
+ * list_count_nodes() landed in mainline 6.3 and was backported to the 6.1 LTS
+ * series in 6.1.191, so a plain < 6.3 test redefines it on 6.1.191 and later.
+ */
+#if (KERNEL_VERSION(6, 3, 0) > LINUX_VERSION_CODE) &&                                    \
+	!(KERNEL_VERSION(6, 1, 191) <= LINUX_VERSION_CODE &&                             \
+	  KERNEL_VERSION(6, 2, 0) > LINUX_VERSION_CODE)
 static inline size_t list_count_nodes(struct list_head *head)
 {
 	struct list_head *pos;
