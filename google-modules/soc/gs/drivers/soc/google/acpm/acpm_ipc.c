@@ -775,6 +775,13 @@ static int __acpm_ipc_send_data(unsigned int channel_id, struct ipc_config *cfg)
 retry:
 		timeout = sched_clock() + IPC_TIMEOUT;
 		timeout_flag = false;
+		/*
+		 * The "cnt_10us = 0" below the retry branches is unreachable,
+		 * so without this the software counter stays tripped once it
+		 * has fired and every remaining retry expires on it straight
+		 * away instead of getting a fresh IPC_TIMEOUT window.
+		 */
+		cnt_10us = 0;
 		do {
 			check_response(channel, cfg);
 			if (!test_bit(seq_num - 1, channel->bitmap_seqnum))
