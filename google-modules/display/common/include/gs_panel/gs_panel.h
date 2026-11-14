@@ -1308,6 +1308,11 @@ struct gs_panel {
 	u32 normal_mode_work_delay_ms;
 	/** @normal_mode_work: periodic work for each panel in normal mode */
 	struct delayed_work normal_mode_work;
+	/**
+	 * @normal_mode_work_stopped: set once the periodic work must not be
+	 *                            re-armed again (driver shutdown)
+	 */
+	bool normal_mode_work_stopped;
 
 	/* use for notify op hz changed */
 	struct blocking_notifier_head op_hz_notifier_head;
@@ -1591,6 +1596,12 @@ void gs_dsi_panel_common_remove(struct mipi_dsi_device *dsi);
 #else
 int gs_dsi_panel_common_remove(struct mipi_dsi_device *dsi);
 #endif
+
+/**
+ * gs_dsi_panel_common_shutdown - Quiesces a dsi panel for reboot/power off
+ * @dsi: dsi device pointer for panel
+ */
+void gs_dsi_panel_common_shutdown(struct mipi_dsi_device *dsi);
 
 /**
  * gs_panel_debugfs_create_cmdset - Creates a cmdset debugfs entry

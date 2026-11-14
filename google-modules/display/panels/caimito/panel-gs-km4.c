@@ -2882,6 +2882,7 @@ MODULE_DEVICE_TABLE(of, gs_panel_of_match);
 static struct mipi_dsi_driver gs_panel_driver = {
 	.probe = km4_panel_probe,
 	.remove = gs_dsi_panel_common_remove,
+	.shutdown = gs_dsi_panel_common_shutdown,
 	.driver = {
 		.name = "panel-gs-km4",
 		.of_match_table = gs_panel_of_match,
