@@ -1442,10 +1442,18 @@ static void gs_panel_normal_mode_work(struct work_struct *work)
 {
 	struct gs_panel *ctx = container_of(work, struct gs_panel, normal_mode_work.work);
 
+	if (ctx->normal_mode_work_stopped)
+		return;
+
 	dev_dbg(ctx->dev, "%s\n", __func__);
 	mutex_lock(&ctx->mode_lock);
 	ctx->desc->gs_panel_func->run_normal_mode_work(ctx);
 	mutex_unlock(&ctx->mode_lock);
+
+	/* Do not re-arm if a shutdown started while the work was running */
+	if (ctx->normal_mode_work_stopped)
+		return;
+
 	schedule_delayed_work(&ctx->normal_mode_work,
 			      msecs_to_jiffies(ctx->normal_mode_work_delay_ms));
 }
@@ -1962,6 +1970,26 @@ int gs_dsi_panel_common_remove(struct mipi_dsi_device *dsi)
 }
 #endif
 EXPORT_SYMBOL_GPL(gs_dsi_panel_common_remove);
+
+void gs_dsi_panel_common_shutdown(struct mipi_dsi_device *dsi)
+{
+	struct gs_panel *ctx = mipi_dsi_get_drvdata(dsi);
+
+	if (!ctx)
+		return;
+
+	/*
+	 * The periodic normal mode work re-arms itself and the panel is not
+	 * necessarily disabled before device_shutdown() runs, so the
+	 * cancel_delayed_work() calls on the disable paths can lose the race
+	 * and leave it armed. It would then keep reading the SPMIC thermal
+	 * zone over ACPM while the rest of the system is being torn down,
+	 * where an ACPM IPC timeout is fatal.
+	 */
+	ctx->normal_mode_work_stopped = true;
+	cancel_delayed_work_sync(&ctx->normal_mode_work);
+}
+EXPORT_SYMBOL_GPL(gs_dsi_panel_common_shutdown);
 
 /* DRM panel funcs */
 
