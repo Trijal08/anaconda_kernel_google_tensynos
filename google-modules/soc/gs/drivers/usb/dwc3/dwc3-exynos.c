@@ -1424,9 +1424,7 @@ static void dwc3_exynos_shutdown(struct platform_device *pdev)
 	 * so stopping the OTG state machine and the clocks is all that is
 	 * actually needed here.
 	 */
-	mutex_lock(&exynos->dotg_lock);
 	dwc3_exynos_otg_exit(dwc, exynos);
-	mutex_unlock(&exynos->dotg_lock);
 
 	pm_runtime_get_sync(&pdev->dev);
 	dwc3_ulpi_exit(dwc);
