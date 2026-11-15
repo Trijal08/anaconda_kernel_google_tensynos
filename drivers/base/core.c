@@ -4875,6 +4875,14 @@ void device_shutdown(void)
 		list_del_init(&dev->kobj.entry);
 		spin_unlock(&devices_kset->list_lock);
 
+		/*
+		 * Log before taking the locks, so that a hang in device_lock()
+		 * or pm_runtime_barrier() is attributed to a device too, not
+		 * just one that made it as far as its ->shutdown() callback.
+		 */
+		if (initcall_debug)
+			dev_info(dev, "shutdown start\n");
+
 		/* hold lock to avoid race with probe/release */
 		if (parent)
 			device_lock(parent);
