@@ -11,6 +11,14 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/ktime.h>
+#include <linux/fs.h>
+#include <linux/proc_fs.h>
+#include <linux/sizes.h>
+#include <linux/uaccess.h>
+#include <linux/vmalloc.h>
+#include <asm/unaligned.h>
 
 #if IS_ENABLED(CONFIG_GSA_PKVM)
 #include <linux/pm_runtime.h>
@@ -203,6 +211,160 @@ static int gsa_link_s2mpu(struct device *dev, struct gsa_mbox *mb)
 }
 #endif /* CONFIG_GSA_PKVM */
 
+/*
+ * ---------------------------------------------------------------------------
+ * /proc/gsadump -- a timestamped capture of every AP<->GSA mailbox transaction,
+ * the vendor-kernel twin of the mainline /proc/gsadump, in the same record
+ * container the modem's /proc sitdump and /proc/trustydump use so one parser
+ * reads all of them:
+ *
+ *     [u64 ts_ns][u16 len][u16 tag][len bytes of u32 words, little-endian]
+ *
+ * ts_ns = ktime_get_boottime_ns(); tag = GSA_DUMP_TX (0) for a request (words:
+ * cmd, argc, args...) and GSA_DUMP_RX (1) for the response (words: rsp_cmd,
+ * rsp_err, rsp_argc, args...), captured before validation so error/malformed
+ * responses are kept too.  A command that times out shows as a TX with no RX.
+ * `echo 1 > /proc/gsadump` (re)starts a capture, `echo 0` stops it.
+ */
+#define GSA_DUMP_SIZE		SZ_1M
+#define GSA_DUMP_REC_HDR	12
+#define GSA_DUMP_TX		0	/* AP -> GSA request */
+#define GSA_DUMP_RX		1	/* GSA -> AP response */
+
+static struct gsa_dump {
+	u8		*buf;
+	size_t		size;
+	size_t		head;
+	size_t		tail;
+	size_t		limit;
+	bool		wrapped;
+	u64		dropped;
+	u64		evicted;
+	unsigned int	readers;
+	bool		on;
+	spinlock_t	lock;
+} gsa_dump = {
+	.lock = __SPIN_LOCK_UNLOCKED(gsa_dump.lock),
+};
+
+static int gsa_dump_open(struct inode *inode, struct file *file)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&gsa_dump.lock, flags);
+	gsa_dump.readers++;
+	spin_unlock_irqrestore(&gsa_dump.lock, flags);
+	return 0;
+}
+
+static int gsa_dump_release(struct inode *inode, struct file *file)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&gsa_dump.lock, flags);
+	gsa_dump.readers--;
+	spin_unlock_irqrestore(&gsa_dump.lock, flags);
+	return 0;
+}
+
+static ssize_t gsa_dump_read(struct file *file, char __user *buf,
+			     size_t count, loff_t *ppos)
+{
+	struct gsa_dump *d = &gsa_dump;
+	size_t off[2], seg[2], pos, done = 0;
+	unsigned long flags;
+	int i;
+
+	if (*ppos < 0)
+		return -EINVAL;
+	pos = *ppos;
+
+	spin_lock_irqsave(&d->lock, flags);
+	if (!d->buf) {
+		spin_unlock_irqrestore(&d->lock, flags);
+		return 0;
+	}
+	off[0] = d->tail;
+	seg[0] = (d->wrapped ? d->limit : d->head) - d->tail;
+	off[1] = 0;
+	seg[1] = d->wrapped ? d->head : 0;
+	spin_unlock_irqrestore(&d->lock, flags);
+
+	for (i = 0; i < 2 && count; i++) {
+		size_t n;
+
+		if (pos >= seg[i]) {
+			pos -= seg[i];
+			continue;
+		}
+		n = min(count, seg[i] - pos);
+		if (copy_to_user(buf + done, d->buf + off[i] + pos, n))
+			return done ? (ssize_t)done : -EFAULT;
+		done += n;
+		count -= n;
+		pos = 0;
+	}
+	*ppos += done;
+	return done;
+}
+
+static ssize_t gsa_dump_write(struct file *file, const char __user *buf,
+			      size_t count, loff_t *ppos)
+{
+	struct gsa_dump *d = &gsa_dump;
+	unsigned long flags;
+	void *fresh = NULL;
+	bool on;
+	int ret;
+
+	ret = kstrtobool_from_user(buf, count, &on);
+	if (ret)
+		return ret;
+
+	if (on && !d->buf) {
+		fresh = vmalloc(GSA_DUMP_SIZE);
+		if (!fresh)
+			return -ENOMEM;
+	}
+
+	spin_lock_irqsave(&d->lock, flags);
+	if (on) {
+		if (fresh && !d->buf) {
+			d->buf = fresh;
+			d->size = GSA_DUMP_SIZE;
+			fresh = NULL;
+		}
+		d->head = 0;
+		d->tail = 0;
+		d->limit = 0;
+		d->wrapped = false;
+		d->dropped = 0;
+		d->evicted = 0;
+		WRITE_ONCE(d->on, true);
+	} else {
+		WRITE_ONCE(d->on, false);
+	}
+	spin_unlock_irqrestore(&d->lock, flags);
+
+	vfree(fresh);
+	return count;
+}
+
+static const struct proc_ops gsa_dump_proc_ops = {
+	.proc_open	= gsa_dump_open,
+	.proc_read	= gsa_dump_read,
+	.proc_write	= gsa_dump_write,
+	.proc_release	= gsa_dump_release,
+	.proc_lseek	= default_llseek,
+};
+
+static void gsa_dump_cleanup(void *data)
+{
+	remove_proc_entry("gsadump", NULL);
+	vfree(gsa_dump.buf);
+	gsa_dump.buf = NULL;
+}
+
 struct gsa_mbox *gsa_mbox_init(struct platform_device *pdev)
 {
 	int err;
@@ -249,7 +411,68 @@ struct gsa_mbox *gsa_mbox_init(struct platform_device *pdev)
 		return ERR_PTR(err);
 	}
 
+	proc_create("gsadump", 0600, NULL, &gsa_dump_proc_ops);
+	devm_add_action_or_reset(dev, gsa_dump_cleanup, NULL);
+
 	return mb;
+}
+
+/* Caller holds gsa_dump.lock. */
+static bool gsa_dump_room(struct gsa_dump *d, size_t need)
+{
+	if (need > d->size)
+		return false;
+
+	for (;;) {
+		if (!d->wrapped) {
+			if (d->size - d->head >= need)
+				return true;
+			if (d->readers)
+				return false;
+			d->limit = d->head;
+			d->head = 0;
+			d->wrapped = true;
+			continue;
+		}
+		if (d->tail - d->head >= need)
+			return true;
+		if (d->readers)
+			return false;
+		d->tail += GSA_DUMP_REC_HDR +
+			   get_unaligned_le16(d->buf + d->tail + 8);
+		d->evicted++;
+		if (d->tail >= d->limit) {
+			d->tail = 0;
+			d->wrapped = false;
+		}
+	}
+}
+
+/* One transaction half @words of @len bytes (u32 words), direction @dir. */
+static void gsa_dump_record(const void *words, u32 len, u16 dir)
+{
+	struct gsa_dump *d = &gsa_dump;
+	size_t need = GSA_DUMP_REC_HDR + len;
+	unsigned long flags;
+	u8 *p;
+
+	if (!READ_ONCE(d->on) || !len || len > U16_MAX)
+		return;
+
+	spin_lock_irqsave(&d->lock, flags);
+	if (!d->buf || !gsa_dump_room(d, need)) {
+		if (d->buf)
+			d->dropped++;
+		spin_unlock_irqrestore(&d->lock, flags);
+		return;
+	}
+	p = d->buf + d->head;
+	put_unaligned_le64(ktime_get_boottime_ns(), p);
+	put_unaligned_le16((u16)len, p + 8);
+	put_unaligned_le16(dir, p + 10);
+	memcpy(p + GSA_DUMP_REC_HDR, words, len);
+	d->head += need;
+	spin_unlock_irqrestore(&d->lock, flags);
 }
 
 static int exec_mbox_cmd_sync_locked(struct gsa_mbox *mb,
@@ -290,6 +513,18 @@ static int exec_mbox_cmd_sync_locked(struct gsa_mbox *mb,
 	for (i = 0; i < req->argc; i++)
 		writel(req->args[i], mb->base + MBOX_SR_REG(i + 2));
 
+	/* Capture the request (cmd, argc, args...) on its way to the GSA. */
+	if (READ_ONCE(gsa_dump.on)) {
+		u32 rec[MBOX_SR_NUM];
+		u32 n = 0, j;
+
+		rec[n++] = req->cmd;
+		rec[n++] = req->argc;
+		for (j = 0; j < req->argc && n < MBOX_SR_NUM; j++)
+			rec[n++] = req->args[j];
+		gsa_dump_record(rec, n * sizeof(u32), GSA_DUMP_TX);
+	}
+
 	/* initiate request */
 	reinit_completion(&mb->mbox_cmd_completion);
 
@@ -307,6 +542,19 @@ static int exec_mbox_cmd_sync_locked(struct gsa_mbox *mb,
 	rsp->cmd = readl(mb->base + MBOX_SR_REG(0));
 	rsp->err = readl(mb->base + MBOX_SR_REG(1));
 	rsp->argc = readl(mb->base + MBOX_SR_REG(2));
+
+	/* Capture the raw response before validation (keep error/malformed ones). */
+	if (READ_ONCE(gsa_dump.on)) {
+		u32 rec[MBOX_SR_NUM];
+		u32 n = 0, j, ac = min(rsp->argc, (u32)(MBOX_SR_NUM - 3));
+
+		rec[n++] = rsp->cmd;
+		rec[n++] = rsp->err;
+		rec[n++] = rsp->argc;
+		for (j = 0; j < ac; j++)
+			rec[n++] = readl(mb->base + MBOX_SR_REG(j + 3));
+		gsa_dump_record(rec, n * sizeof(u32), GSA_DUMP_RX);
+	}
 
 	/* check argc: first 3 registers are for cmd, err and argc */
 	if (WARN_ON(rsp->argc + 3 > MBOX_SR_NUM)) {
