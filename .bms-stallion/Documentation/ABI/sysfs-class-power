@@ -1,0 +1,65 @@
+What:		/sys/class/power_supply/battery/ttx_from_soc
+Date:		Nov 2025
+Contact:	"Adam Solawa" <solawaa@google.com>
+Description:
+		From soc argument to time to xx% estimation
+
+Users:		Google Battery HAL
+
+What:		/sys/class/power_supply/battery/ttx_to_soc
+Date:		Nov 2025
+Contact:	"Adam Solawa" <solawaa@google.com>
+Description:
+		To soc argument to time to xx% estimation
+
+Users:		Google Battery HAL
+
+What:		/sys/class/power_supply/battery/ttx_time
+Date:		Nov 2025
+Contact:	"Adam Solawa" <solawaa@google.com>
+Description:
+		To soc argument to time to xx% estimation
+
+Users:		Google Battery HAL
+
+What:		/sys/class/power_supply/battery/charge_to_limit
+Date:		Mar 2024
+Contact:	hsiufangho@google.com
+Description:
+		Read/Write charge to limit SOC(state of charge)
+                Write 0 to disable this feature.
+
+		Access: Read/Write
+		Valid values: Represented as int
+
+What:		/sys/class/power_supply/max77779fg/registers_dump
+Date:		Jul 2024
+Contact:	"Spade Lee" <spadelee@google.com>
+Description:
+		Dump max77779fg registers including FG_DEBUG
+
+Users:		Dumpstate
+
+What:		/sys/class/power_supply/maxfg/registers_dump
+Date:		Jul 2024
+Contact:	"Spade Lee" <spadelee@google.com>
+Description:
+		Dump max77759/max1720x registers
+
+Users:		Dumpstate
+
+What:		/sys/class/power_supply/maxfg_base/registers_dump
+Date:		Jul 2024
+Contact:	"Spade Lee" <spadelee@google.com>
+Description:
+		Dump maxfg_base registers
+
+Users:		Dumpstate
+
+What:		/sys/class/power_supply/maxfg_secondary/registers_dump
+Date:		Jul 2024
+Contact:	"Spade Lee" <spadelee@google.com>
+Description:
+		Dump maxfg_secondary registers
+
+Users:		Dumpstate
