@@ -297,6 +297,7 @@
   crc32_le
   crc8
   crc8_populate_msb
+  creds_are_invalid
   crypto_aead_decrypt
   crypto_aead_encrypt
   crypto_aead_setauthsize
@@ -543,6 +544,7 @@
   dev_set_name
   dev_vprintk_emit
   _dev_warn
+  dget_parent
   disable_irq
   disable_irq_nosync
   disable_percpu_irq
@@ -1155,6 +1157,7 @@
   int_pow
   int_sqrt
   int_to_scsilun
+  __invalid_creds
   iomem_resource
   iommu_alloc_resv_region
   iommu_attach_device
@@ -1615,6 +1618,7 @@
   param_set_int
   param_set_uint
   param_set_uint_minmax
+  path_put
   pci_alloc_irq_vectors_affinity
   pci_assign_resource
   pci_clear_master
@@ -2330,6 +2334,7 @@
   tcpm_sourcing_vbus
   tcpm_tcpc_reset
   tcpm_unregister_port
+  tcpm_update_sink_capabilities
   tcpm_vbus_change
   teo_cpu_get_util_threshold
   teo_cpu_set_util_threshold
@@ -2683,7 +2688,6 @@
   uart_resume_port
   uart_set_options
   uart_suspend_port
-  uart_try_toggle_sysrq
   uart_unregister_driver
   uart_update_timeout
   uart_write_wakeup
