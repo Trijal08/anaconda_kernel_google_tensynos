@@ -1465,8 +1465,19 @@ static const u32 __wl_cipher_suites[] = {
 #ifdef WL_GCMP
 	WLAN_CIPHER_SUITE_GCMP,
 	WLAN_CIPHER_SUITE_GCMP_256,
+	/*
+	 * Do not repeat the two BIP_GMAC suites the MFP block above already
+	 * advertises. WL_GCMP implies LINUX_VERSION_CODE > 4.0.0, so whenever
+	 * MFP is defined those entries are already present, and since upstream
+	 * commit 7187d145d904 ("wifi: cfg80211: reject duplicate wiphy cipher
+	 * suite entries") - in 6.1.192 - wiphy_register() returns -EINVAL for a
+	 * duplicated suite, which fails wl_cfg80211_attach() and leaves the
+	 * device with no wlan interface at all.
+	 */
+#ifndef MFP
 	WLAN_CIPHER_SUITE_BIP_GMAC_128,
 	WLAN_CIPHER_SUITE_BIP_GMAC_256,
+#endif /* !MFP */
 #endif /* WL_GCMP */
 };
 
