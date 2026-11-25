@@ -16464,6 +16464,18 @@ dhd_free(dhd_pub_t *dhdp)
 				MFREE(dhdp->osh, dhdp->plat_info, dhdp->plat_info_size);
 			}
 
+			/*
+			 * g_dhd_pub points into the object released here: it is
+			 * set to &dhd->pub on attach and was never cleared.
+			 * dhd_reboot_callback() dereferences it from the reboot
+			 * notifier, which stays registered until module exit, so
+			 * leaving it set makes every reboot after a detach touch
+			 * freed - or preallocated and reused - memory.
+			 */
+			if (g_dhd_pub == dhdp) {
+				g_dhd_pub = NULL;
+			}
+
 			/* If pointer is allocated by dhd_os_prealloc then avoid MFREE */
 			if (dhd != (dhd_info_t *)dhd_os_prealloc(dhdp,
 					DHD_PREALLOC_DHD_INFO, 0, FALSE))
@@ -16684,6 +16696,14 @@ static int
 dhd_reboot_callback(struct notifier_block *this, unsigned long code, void *unused)
 {
 	dhd_pub_t *dhdp = g_dhd_pub;
+
+	/* The reboot notifier outlives any attached device. */
+	if (dhdp == NULL) {
+		DHD_PRINT(("%s: no attached device, code = %ld\n",
+			__FUNCTION__, code));
+		return NOTIFY_DONE;
+	}
+
 	dhdp->reset_5g_rffe_vio = TRUE;
 
 	BCM_REFERENCE(dhdp);
