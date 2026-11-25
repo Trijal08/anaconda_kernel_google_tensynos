@@ -177,6 +177,34 @@ static void hugetlb_cgroup_css_free(struct cgroup_subsys_state *css)
 	hugetlb_cgroup_free(hugetlb_cgroup_from_css(css));
 }
 
+static void hugetlb_cgroup_move_usage(struct hugetlb_cgroup *from,
+				      struct hugetlb_cgroup *to,
+				      struct page *from_page,
+				      struct page *to_page)
+{
+	int idx = hstate_index(page_hstate(from_page));
+	unsigned long nr_pages = compound_nr(from_page);
+	int from_nid = page_to_nid(from_page);
+	int to_nid = page_to_nid(to_page);
+	unsigned long usage;
+
+	lockdep_assert_held(&hugetlb_lock);
+
+	if (!from || !to)
+		return;
+
+	if (from == to && from_nid == to_nid)
+		return;
+
+	usage = from->nodeinfo[from_nid]->usage[idx];
+	if (WARN_ON_ONCE(usage < nr_pages))
+		return;
+	WRITE_ONCE(from->nodeinfo[from_nid]->usage[idx], usage - nr_pages);
+
+	usage = to->nodeinfo[to_nid]->usage[idx];
+	WRITE_ONCE(to->nodeinfo[to_nid]->usage[idx], usage + nr_pages);
+}
+
 /*
  * Should be called with hugetlb_lock held.
  * Since we are holding hugetlb_lock, pages cannot get moved from
@@ -210,6 +238,8 @@ static void hugetlb_cgroup_move_parent(int idx, struct hugetlb_cgroup *h_cg,
 	counter = &h_cg->hugepage[idx];
 	/* Take the pages off the local counter */
 	page_counter_cancel(counter, nr_pages);
+
+	hugetlb_cgroup_move_usage(h_cg, parent, page, page);
 
 	set_hugetlb_cgroup(page, parent);
 out:
@@ -901,6 +931,9 @@ void hugetlb_cgroup_migrate(struct page *oldhpage, struct page *newhpage)
 	/* move the h_cg details to new cgroup */
 	set_hugetlb_cgroup(newhpage, h_cg);
 	set_hugetlb_cgroup_rsvd(newhpage, h_cg_rsvd);
+
+	hugetlb_cgroup_move_usage(h_cg, h_cg, oldhpage, newhpage);
+
 	list_move(&newhpage->lru, &h->hugepage_activelist);
 	spin_unlock_irq(&hugetlb_lock);
 	return;

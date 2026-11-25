@@ -690,7 +690,7 @@ struct hid_device {							/* device report descriptor */
 
 	unsigned int id;						/* system unique id */
 
-	ANDROID_KABI_USE(1, struct { __s32 battery_charge_status; u32 padding; });
+	ANDROID_KABI_USE(1, struct { __s32 battery_charge_status; __s32 battery_report_offset; });
 	ANDROID_KABI_RESERVE(2);
 };
 

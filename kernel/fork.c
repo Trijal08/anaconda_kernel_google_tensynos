@@ -665,8 +665,7 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 	LIST_HEAD(uf);
 	MA_STATE(mas, &mm->mm_mt, 0, 0);
 
-	if (mmap_write_lock_killable(oldmm))
-		return -EINTR;
+	mmap_assert_write_locked(oldmm);
 	flush_cache_dup_mm(oldmm);
 	uprobe_dup_mmap(oldmm, mm);
 	/*
@@ -676,11 +675,6 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 
 	/* No ordering required: file already has been exposed. */
 	dup_mm_exe_file(mm, oldmm);
-
-	mm->total_vm = oldmm->total_vm;
-	mm->data_vm = oldmm->data_vm;
-	mm->exec_vm = oldmm->exec_vm;
-	mm->stack_vm = oldmm->stack_vm;
 
 	retval = ksm_fork(mm, oldmm);
 	if (retval)
@@ -811,6 +805,7 @@ out:
 		dup_userfaultfd_complete(&uf);
 	else
 		dup_userfaultfd_fail(&uf);
+	uprobe_end_dup_mmap();
 	return retval;
 
 fail_nomem_anon_vma_fork:
@@ -838,7 +833,7 @@ static inline void mm_free_pgd(struct mm_struct *mm)
 #else
 static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 {
-	mmap_write_lock(oldmm);
+	mmap_assert_write_locked(oldmm);
 	dup_mm_exe_file(mm, oldmm);
 	mmap_write_unlock(oldmm);
 	return 0;
@@ -1664,22 +1659,29 @@ static struct mm_struct *dup_mm(struct task_struct *tsk,
 	if (!mm)
 		goto fail_nomem;
 
+	uprobe_start_dup_mmap();
+	if (mmap_write_lock_killable(oldmm)) {
+		free_mm(mm);
+		goto fail_uprobe;
+	}
+
 	memcpy(mm, oldmm, sizeof(*mm));
 	mm->abi_extend = kmalloc(sizeof(*mm->abi_extend), GFP_KERNEL);
 	if (!mm->abi_extend) {
+		mmap_write_unlock(oldmm);
 		free_mm(mm);
-		goto fail_nomem;
+		goto fail_uprobe;
 	}
 	mm->abi_extend->dmabuf_info = NULL;
 
-	if (!mm_init(mm, tsk, mm->user_ns))
-		goto fail_nomem;
+	if (!mm_init(mm, tsk, mm->user_ns)) {
+		mmap_write_unlock(oldmm);
+		goto fail_uprobe;
+	}
 
-	uprobe_start_dup_mmap();
 	err = dup_mmap(mm, oldmm);
 	if (err)
 		goto free_pt;
-	uprobe_end_dup_mmap();
 
 	mm->hiwater_rss = get_mm_rss(mm);
 	mm->hiwater_vm = mm->total_vm;
@@ -1694,9 +1696,10 @@ free_pt:
 	mm->binfmt = NULL;
 	mm_init_owner(mm, NULL);
 	mmput(mm);
-	if (err)
-		uprobe_end_dup_mmap();
+	return NULL;
 
+fail_uprobe:
+	uprobe_end_dup_mmap();
 fail_nomem:
 	return NULL;
 }
@@ -2850,6 +2853,10 @@ struct task_struct *create_io_thread(int (*fn)(void *), void *arg, int node)
 		.fn_arg		= arg,
 		.io_thread	= 1,
 	};
+
+	/* A creator past its fatal signal or its coredump point gets no thread. */
+	if (current->flags & (PF_SIGNALED | PF_POSTCOREDUMP))
+		return ERR_PTR(-EINTR);
 
 	return copy_process(NULL, 0, node, &args);
 }
